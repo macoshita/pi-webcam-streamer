@@ -7,6 +7,7 @@ use tokio::net::TcpListener;
 
 mod camera;
 mod config;
+mod recorder;
 
 #[tokio::main]
 async fn main() {
@@ -26,6 +27,15 @@ async fn main() {
             return;
         }
     };
+
+    // Start recorder
+    if config.recording_path.is_some() {
+        let recorder = recorder::Recorder::new(config.clone(), frame_rx.clone());
+        recorder.start();
+        println!("Recorder started");
+    } else {
+        println!("Recorder disabled (RECORDING_PATH not set)");
+    }
 
     // Build our application with a single route
     let app = Router::new()
