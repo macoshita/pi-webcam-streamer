@@ -4,5 +4,10 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+anyhow = "1.0.100"
 axum = "0.8.8"
+futures = "0.3.31"
+image = "0.25.9"
+nokhwa = { version = "0.10.10", features = ["input-native", "output-threaded"] }
 tokio = { version = "1.49.0", features = ["full"] }
+tokio-stream = { version = "0.1.18", features = ["net", "sync"] }

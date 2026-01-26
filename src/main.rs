@@ -5,15 +5,57 @@ use axum::{
 };
 use tokio::net::TcpListener;
 
+mod camera;
+
 #[tokio::main]
 async fn main() {
+    // Start camera capture
+    let frame_rx = match camera::start_camera_capture(0, 320, 240, 5) {
+        Ok(rx) => rx,
+        Err(e) => {
+            eprintln!("Failed to start camera: {}", e);
+            return;
+        }
+    };
+
     // Build our application with a single route
-    let app = Router::new().route("/", get(index_handler));
+    let app = Router::new()
+        .route("/", get(index_handler))
+        .route("/stream", get(stream_handler))
+        .with_state(frame_rx);
 
     // Run it with hyper on localhost:8080
     let listener = TcpListener::bind("0.0.0.0:8080").await.unwrap();
     println!("Server running on http://0.0.0.0:8080");
     axum::serve(listener, app).await.unwrap();
+}
+
+async fn stream_handler(
+    axum::extract::State(rx): axum::extract::State<camera::FrameReceiver>,
+) -> axum::response::Response {
+    use axum::body::Body;
+    use futures::stream::StreamExt;
+
+    let stream = tokio_stream::wrappers::WatchStream::new(rx)
+        .filter_map(|frame_opt| async move { frame_opt })
+        .map(|frame: std::sync::Arc<Vec<u8>>| {
+            let header = format!(
+                "--frame\r\nContent-Type: image/jpeg\r\nContent-Length: {}\r\n\r\n",
+                frame.len()
+            );
+            let mut bytes = Vec::with_capacity(header.len() + frame.len() + 2);
+            bytes.extend_from_slice(header.as_bytes());
+            bytes.extend_from_slice(&frame);
+            bytes.extend_from_slice(b"\r\n");
+            Ok::<_, std::io::Error>(bytes)
+        });
+
+    let body = Body::from_stream(stream);
+
+    axum::response::Response::builder()
+        .header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
+        .body(body)
+        .unwrap()
 }
 
 async fn index_handler() -> Html<&'static str> {
