@@ -6,11 +6,20 @@ use axum::{
 use tokio::net::TcpListener;
 
 mod camera;
+mod config;
 
 #[tokio::main]
 async fn main() {
+    let config = config::Config::from_env();
+    println!("Loaded config: {:?}", config);
+
     // Start camera capture
-    let frame_rx = match camera::start_camera_capture(0, 320, 240, 5) {
+    let frame_rx = match camera::start_camera_capture(
+        config.camera_index,
+        config.camera_width,
+        config.camera_height,
+        config.camera_fps,
+    ) {
         Ok(rx) => rx,
         Err(e) => {
             eprintln!("Failed to start camera: {}", e);
@@ -24,9 +33,10 @@ async fn main() {
         .route("/stream", get(stream_handler))
         .with_state(frame_rx);
 
-    // Run it with hyper on localhost:8080
-    let listener = TcpListener::bind("0.0.0.0:8080").await.unwrap();
-    println!("Server running on http://0.0.0.0:8080");
+    // Run it with hyper
+    let addr = format!("0.0.0.0:{}", config.port);
+    let listener = TcpListener::bind(&addr).await.unwrap();
+    println!("Server running on http://{}", addr);
     axum::serve(listener, app).await.unwrap();
 }
 

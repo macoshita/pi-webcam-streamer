@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 anyhow = "1.0.100"
 axum = "0.8.8"
+dotenvy = "0.15.7"
 futures = "0.3.31"
 image = "0.25.9"
 nokhwa = { version = "0.10.10", features = ["input-native", "output-threaded"] }
