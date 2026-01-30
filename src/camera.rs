@@ -37,46 +37,52 @@ fn run_capture_loop(
         }
     }
 
-    let formats_to_try = [
-        (640, 480, 30, nokhwa::utils::FrameFormat::MJPEG),
-        (640, 480, 30, nokhwa::utils::FrameFormat::YUYV),
-        (1280, 720, 30, nokhwa::utils::FrameFormat::MJPEG),
-        (1280, 720, 30, nokhwa::utils::FrameFormat::YUYV),
-        (320, 240, 30, nokhwa::utils::FrameFormat::MJPEG),
-        (320, 240, 30, nokhwa::utils::FrameFormat::YUYV),
-    ];
+    let mut camera = {
+        let req = RequestedFormat::new::<RgbFormat>(RequestedFormatType::None);
+        Camera::new(index.clone(), req)?
+    };
 
-    let mut camera = None;
+    let mut compatible_formats = camera.compatible_camera_formats()?;
+    
+    // Filter by requested resolution
+    let mut candidates: Vec<_> = compatible_formats
+        .iter()
+        .cloned()
+        .filter(|fmt| fmt.width() == width && fmt.height() == height)
+        .collect();
 
-    for (w, h, f, fmt) in formats_to_try {
-        println!("Trying format: {}x{} @ {}fps {:?}", w, h, f, fmt);
-        let req = RequestedFormat::new::<RgbFormat>(RequestedFormatType::Closest(
-            nokhwa::utils::CameraFormat::new_from(w, h, fmt, f),
-        ));
-        match Camera::new(index.clone(), req) {
-            Ok(mut cam) => {
-                if let Ok(_) = cam.open_stream() {
-                    println!("Successfully opened camera with {}x{} @ {}fps {:?}", w, h, f, fmt);
-                    camera = Some(cam);
-                    break;
-                }
-            }
-            Err(e) => {
-                println!("Failed to create camera with {:?}: {}", fmt, e);
-            }
-        }
+    if candidates.is_empty() {
+        println!("No exact resolution match for {}x{}. Using all available formats.", width, height);
+        candidates = compatible_formats;
     }
 
-    let mut camera = match camera {
-        Some(c) => c,
-        None => {
-             println!("All requested formats failed. Trying defaults as last resort...");
-             let requested_auto = RequestedFormat::new::<RgbFormat>(RequestedFormatType::None);
-             let mut cam = Camera::new(index, requested_auto).context("Failed to create camera with default settings")?;
-             cam.open_stream().context("Failed to open camera stream with default settings")?;
-             cam
-        }
-    };
+    // Sort by FPS (ascending) to prefer lowest frame rate
+    // Then by format (prefer MJPEG over others if FPS is same? Or doesn't matter much)
+    candidates.sort_by(|a, b| {
+        a.frame_rate().cmp(&b.frame_rate())
+            .then_with(|| {
+                 // Prefer MJPEG if FPS is equal
+                 if a.format() == nokhwa::utils::FrameFormat::MJPEG {
+                     std::cmp::Ordering::Less
+                 } else if b.format() == nokhwa::utils::FrameFormat::MJPEG {
+                     std::cmp::Ordering::Greater
+                 } else {
+                     std::cmp::Ordering::Equal
+                 }
+            })
+    });
+
+    println!("Found {} candidate formats. Top 3:", candidates.len());
+    for (i, fmt) in candidates.iter().take(3).enumerate() {
+        println!("{}: {:?}", i + 1, fmt);
+    }
+
+    let selected_format = candidates.first().ok_or_else(|| anyhow::anyhow!("No compatible camera formats found"))?;
+    
+    println!("Selected format: {:?}", selected_format);
+    
+    camera.set_camera_format(*selected_format)?;
+    camera.open_stream()?;
 
 
     println!("Camera started: {:?}", camera.camera_format());
