@@ -9,8 +9,9 @@ use tokio::sync::watch;
 
 pub type FrameReceiver = watch::Receiver<Option<Arc<Vec<u8>>>>;
 
-pub fn start_camera_capture(index: u32, width: u32, height: u32, fps: u32, request_format: &str) -> Result<FrameReceiver> {
+pub fn start_camera_capture(index: u32, width: u32, height: u32, fps: u32, request_format: &str) -> Result<(FrameReceiver, u32)> {
     let camera = initialize_camera(index, width, height, fps, request_format)?;
+    let actual_fps = camera.camera_format().frame_rate();
     let (tx, rx) = watch::channel(None);
 
     thread::spawn(move || {
@@ -19,7 +20,7 @@ pub fn start_camera_capture(index: u32, width: u32, height: u32, fps: u32, reque
         }
     });
 
-    Ok(rx)
+    Ok((rx, actual_fps))
 }
 
 fn initialize_camera(

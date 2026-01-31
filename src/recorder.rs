@@ -8,11 +8,12 @@ use tokio::sync::watch;
 pub struct Recorder {
     config: Config,
     frame_rx: watch::Receiver<Option<Arc<Vec<u8>>>>,
+    fps: u32,
 }
 
 impl Recorder {
-    pub fn new(config: Config, frame_rx: watch::Receiver<Option<Arc<Vec<u8>>>>) -> Self {
-        Self { config, frame_rx }
+    pub fn new(config: Config, frame_rx: watch::Receiver<Option<Arc<Vec<u8>>>>, fps: u32) -> Self {
+        Self { config, frame_rx, fps }
     }
 
     pub fn start(mut self) {
@@ -78,7 +79,7 @@ impl Recorder {
     }
 
     fn spawn_ffmpeg(&self, path: &str) -> std::io::Result<Child> {
-        let fps = self.config.camera_fps.to_string();
+        let fps = self.fps.to_string();
         let segment_time = (self.config.recording_segment_minutes * 60).to_string();
         let output_pattern = format!("{}/%Y%m%d_%H%M%S.mp4", path);
 
@@ -89,13 +90,14 @@ impl Recorder {
 
         // Input
         cmd.args(&[
-            "-framerate", &fps,
+            "-use_wallclock_as_timestamps", "1",
             "-f", "mjpeg",
             "-i", "pipe:0",
         ]);
 
         // Output Format & Codec
         cmd.args(&["-vf", "format=yuv420p"]);
+        cmd.args(&["-r", &fps]); // Normalize output framerate
         
         if cfg!(target_os = "linux") {
             // Hardware encoding on Pi

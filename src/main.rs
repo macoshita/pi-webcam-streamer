@@ -15,25 +15,27 @@ async fn main() {
     println!("Loaded config: {:?}", config);
 
     // Start camera capture
-    let frame_rx = match camera::start_camera_capture(
+    let (frame_rx, actual_fps) = match camera::start_camera_capture(
         config.camera_index,
         config.camera_width,
         config.camera_height,
         config.camera_fps,
         &config.camera_format,
     ) {
-        Ok(rx) => rx,
+        Ok((rx, fps)) => (rx, fps),
         Err(e) => {
             eprintln!("Failed to start camera: {}", e);
             return;
         }
     };
 
+    println!("Camera initialized. Configured FPS: {}, Actual FPS: {}", config.camera_fps, actual_fps);
+
     // Start recorder
     if config.recording_path.is_some() {
-        let recorder = recorder::Recorder::new(config.clone(), frame_rx.clone());
+        let recorder = recorder::Recorder::new(config.clone(), frame_rx.clone(), actual_fps);
         recorder.start();
-        println!("Recorder started");
+        println!("Recorder started with FPS: {}", actual_fps);
     } else {
         println!("Recorder disabled (RECORDING_PATH not set)");
     }
