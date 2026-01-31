@@ -97,12 +97,22 @@ impl Recorder {
         // Output Format & Codec
         cmd.args(&["-vf", "format=yuv420p"]);
         
-        if cfg!(target_os = "linux") {
+        let video_codec = self.config.recording_video_codec.as_deref().unwrap_or(
+            if cfg!(target_os = "linux") { "h264_v4l2m2m" } else { "libx264" }
+        );
+
+        cmd.args(&["-c:v", video_codec]);
+        
+        // Force keyframe every 2 seconds for better streaming/segmentat
+        let gop = (self.config.camera_fps * 2).to_string();
+        cmd.args(&["-g", &gop]);
+
+        if video_codec == "h264_v4l2m2m" {
             // Hardware encoding on Pi
-            cmd.args(&["-c:v", "h264_v4l2m2m", "-b:v", "5M"]);
-        } else {
-            // Software encoding for development
-            cmd.args(&["-c:v", "libx264", "-preset", "ultrafast"]);
+            cmd.args(&["-b:v", "5M"]);
+        } else if video_codec == "libx264" {
+            // Software encoding
+            cmd.args(&["-preset", "ultrafast"]);
         }
 
         // Segmentation
@@ -110,6 +120,7 @@ impl Recorder {
             "-f", "segment",
             "-segment_time", &segment_time,
             "-strftime", "1",
+            "-segment_format_options", "movflags=frag_keyframe+empty_moov+default_base_moof",
             &output_pattern,
         ]);
 
