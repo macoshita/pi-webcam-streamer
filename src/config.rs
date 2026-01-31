@@ -7,6 +7,7 @@ pub struct Config {
     pub camera_height: u32,
     pub camera_fps: u32,
     pub port: u16,
+    pub camera_format: String,
     pub recording_path: Option<String>,
     pub recording_segment_minutes: u32,
 }
@@ -41,6 +42,8 @@ impl Config {
             .and_then(|v| v.parse().ok())
             .unwrap_or(8080);
 
+        let camera_format = env::var("CAMERA_FORMAT").unwrap_or_else(|_| "MJPEG".to_string());
+
         let recording_path = env::var("RECORDING_PATH").ok();
 
         let recording_segment_minutes = env::var("RECORDING_SEGMENT_MINUTES")
@@ -54,6 +57,7 @@ impl Config {
             camera_height,
             camera_fps,
             port,
+            camera_format,
             recording_path,
             recording_segment_minutes,
         }

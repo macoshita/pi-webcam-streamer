@@ -20,6 +20,7 @@ async fn main() {
         config.camera_width,
         config.camera_height,
         config.camera_fps,
+        &config.camera_format,
     ) {
         Ok(rx) => rx,
         Err(e) => {
