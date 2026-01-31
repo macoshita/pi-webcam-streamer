@@ -85,7 +85,7 @@ impl Recorder {
         let mut cmd = Command::new("ffmpeg");
         
         // Log level
-        cmd.args(&["-loglevel", "error", "-stats"]);
+        cmd.args(&["-loglevel", "error"]);
 
         // Input
         cmd.args(&[
