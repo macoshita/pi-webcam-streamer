@@ -11,6 +11,7 @@ use tower_http::services::ServeDir;
 mod camera;
 mod config;
 mod recorder;
+mod cleaner;
 
 #[derive(Clone)]
 struct AppState {

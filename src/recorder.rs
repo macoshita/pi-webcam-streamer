@@ -1,9 +1,10 @@
-use crate::config::Config;
-use std::process::Stdio;
-use std::sync::Arc;
 use tokio::io::AsyncWriteExt;
 use tokio::process::{Child, Command};
 use tokio::sync::watch;
+use crate::cleaner::Cleaner;
+use crate::config::Config;
+use std::process::Stdio;
+use std::sync::Arc;
 
 pub struct Recorder {
     config: Config,
@@ -23,11 +24,19 @@ impl Recorder {
                 None => return, // No recording path configured
             };
 
-            // Ensure directory exists
             if let Err(e) = tokio::fs::create_dir_all(recording_path).await {
                 eprintln!("Failed to create recording directory: {}", e);
                 return;
             }
+
+            // Start cleanup task
+            let cleaner = Cleaner::new(self.config.clone());
+            tokio::spawn(async move {
+                loop {
+                    cleaner.cleanup().await;
+                    tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
+                }
+            });
 
             let mut process: Option<Child> = None;
 

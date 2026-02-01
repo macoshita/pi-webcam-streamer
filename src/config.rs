@@ -11,6 +11,8 @@ pub struct Config {
     pub recording_path: Option<String>,
     pub recording_segment_minutes: u32,
     pub recording_video_codec: Option<String>,
+    pub recording_retention_days: u64,
+    pub recording_max_size_mb: u64,
 }
 
 impl Config {
@@ -54,6 +56,16 @@ impl Config {
 
         let recording_video_codec = env::var("RECORDING_VIDEO_CODEC").ok();
 
+        let recording_retention_days = env::var("RECORDING_RETENTION_DAYS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(7);
+
+        let recording_max_size_mb = env::var("RECORDING_MAX_SIZE_MB")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(128);
+
         Config {
             camera_index,
             camera_width,
@@ -64,6 +76,8 @@ impl Config {
             recording_path,
             recording_segment_minutes,
             recording_video_codec,
+            recording_retention_days,
+            recording_max_size_mb,
         }
     }
 }
