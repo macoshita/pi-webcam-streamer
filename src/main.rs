@@ -4,6 +4,7 @@ use axum::{
     routing::get,
     Router,
 };
+use chrono::{Local, NaiveDateTime};
 use tokio::net::TcpListener;
 use tower_http::services::ServeDir;
 
@@ -164,22 +165,38 @@ async fn recordings_handler(State(state): State<AppState>) -> Html<String> {
         if let Ok(mut read_dir) = tokio::fs::read_dir(&path).await {
             while let Ok(Some(entry)) = read_dir.next_entry().await {
                 if let Ok(file_name) = entry.file_name().into_string() {
-                    if file_name.ends_with(".mp4") {
-                        entries.push(file_name);
+                    if let Some(stem) = file_name.strip_suffix(".mp4") {
+                        if let Ok(dt) = NaiveDateTime::parse_from_str(stem, "%Y%m%d_%H%M%S") {
+                            entries.push((file_name, dt));
+                        }
                     }
                 }
             }
         }
         // Sort descending (newest first)
-        entries.sort_by(|a, b| b.cmp(a));
+        entries.sort_by(|a, b| b.1.cmp(&a.1));
 
         if entries.is_empty() {
              html.push_str("<li>No recordings found.</li>");
         } else {
-            for file_name in entries {
+            let now = Local::now().naive_local();
+            for (file_name, dt) in entries {
+                let diff = now.signed_duration_since(dt);
+                let ago = if diff.num_minutes() < 1 {
+                    "たった今".to_string()
+                } else if diff.num_minutes() < 60 {
+                    format!("{}分前", diff.num_minutes())
+                } else if diff.num_hours() < 24 {
+                    format!("{}時間前", diff.num_hours())
+                } else {
+                    format!("{}日前", diff.num_days())
+                };
+                
+                let formatted_date = dt.format("%m月%d日 %H時%M分").to_string();
+
                 html.push_str(&format!(
-                    r#"<li><a href="/videos/{}" class="file" target="_blank">{}</a></li>"#,
-                    file_name, file_name
+                    r#"<li><a href="/videos/{}" class="file" target="_blank">{} ({})</a></li>"#,
+                    file_name, formatted_date, ago
                 ));
             }
         }
