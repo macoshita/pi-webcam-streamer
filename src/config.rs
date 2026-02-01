@@ -10,6 +10,7 @@ pub struct Config {
     pub camera_format: String,
     pub recording_path: Option<String>,
     pub recording_segment_minutes: u32,
+    pub recording_video_codec: Option<String>,
 }
 
 impl Config {
@@ -51,6 +52,8 @@ impl Config {
             .and_then(|v| v.parse().ok())
             .unwrap_or(10);
 
+        let recording_video_codec = env::var("RECORDING_VIDEO_CODEC").ok();
+
         Config {
             camera_index,
             camera_width,
@@ -60,6 +63,7 @@ impl Config {
             camera_format,
             recording_path,
             recording_segment_minutes,
+            recording_video_codec,
         }
     }
 }
