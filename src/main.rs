@@ -109,22 +109,26 @@ async fn index_handler() -> Html<&'static str> {
 <html>
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Webcam Stream</title>
     <style>
-        body { font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; text-align: center; }
-        h1 { color: #333; }
-        img { max-width: 100%; border: 2px solid #333; border-radius: 8px; }
-        .nav { margin-bottom: 20px; }
-        .nav a { margin: 0 10px; color: #007bff; text-decoration: none; }
-        .nav a:hover { text_decoration: underline; }
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 20px auto; padding: 0 10px; text-align: center; background-color: #f4f4f9; }
+        h1 { color: #333; font-size: 1.5rem; margin-bottom: 20px; }
+        img { max-width: 100%; height: auto; border: 2px solid #333; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .nav { margin-bottom: 20px; padding: 10px; background: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); display: inline-block; }
+        .nav a { margin: 0 10px; color: #007bff; text-decoration: none; font-weight: bold; font-size: 1.1rem; padding: 10px; }
+        .nav a:hover { text_decoration: underline; color: #0056b3; }
+        .nav a.active { color: #333; pointer-events: none; text-decoration: none; border-bottom: 2px solid #333; }
+        @media (max-width: 600px) {
+            /* Keep nav inline */
+        }
     </style>
 </head>
 <body>
     <div class="nav">
-        <a href="/">Stream</a>
-        <a href="/recordings">Recordings</a>
+        <a href="/" class="active">ライブ映像</a>
+        <a href="/recordings">録画</a>
     </div>
-    <h1>Webcam Stream</h1>
     <img src="/stream" alt="Webcam Stream">
 </body>
 </html>"#,
@@ -137,25 +141,30 @@ async fn recordings_handler(State(state): State<AppState>) -> Html<String> {
 <html>
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Recordings</title>
     <style>
-        body { font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; text-align: center; }
-        h1 { color: #333; }
-        .nav { margin-bottom: 20px; }
-        .nav a { margin: 0 10px; color: #007bff; text-decoration: none; }
-        .nav a:hover { text_decoration: underline; }
-        ul { list-style: none; padding: 0; }
-        li { margin: 10px 0; }
-        a.file { text-decoration: none; color: #333; font-size: 1.1em; }
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 20px auto; padding: 0 10px; text-align: center; background-color: #f4f4f9; }
+        h1 { color: #333; font-size: 1.5rem; margin-bottom: 20px; }
+        .nav { margin-bottom: 20px; padding: 10px; background: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); display: inline-block; }
+        .nav a { margin: 0 10px; color: #007bff; text-decoration: none; font-weight: bold; font-size: 1.1rem; padding: 10px; }
+        .nav a:hover { text_decoration: underline; color: #0056b3; }
+        .nav a.active { color: #333; pointer-events: none; text-decoration: none; border-bottom: 2px solid #333; }
+        ul { list-style: none; padding: 0; max-width: 600px; margin: 0 auto; }
+        li { margin: 10px 0; background: #fff; border-radius: 8px; padding: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); text-align: left; }
+        a.file { text-decoration: none; color: #333; font-size: 1.1em; display: block; }
         a.file:hover { color: #007bff; }
+        .time { font-size: 0.9em; color: #666; display: block; margin-top: 5px; }
+        @media (max-width: 600px) {
+            /* Keep nav inline */
+        }
     </style>
 </head>
 <body>
     <div class="nav">
-        <a href="/">Stream</a>
-        <a href="/recordings">Recordings</a>
+        <a href="/">ライブ映像</a>
+        <a href="/recordings" class="active">録画</a>
     </div>
-    <h1>Recordings</h1>
     <ul>
 "#,
     );
@@ -195,7 +204,7 @@ async fn recordings_handler(State(state): State<AppState>) -> Html<String> {
                 let formatted_date = dt.format("%m月%d日 %H時%M分").to_string();
 
                 html.push_str(&format!(
-                    r#"<li><a href="/videos/{}" class="file" target="_blank">{} ({})</a></li>"#,
+                    r#"<li><a href="/videos/{}" class="file" target="_blank">{} <span class="time">({})</span></a></li>"#,
                     file_name, formatted_date, ago
                 ));
             }
