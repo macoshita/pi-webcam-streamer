@@ -13,7 +13,7 @@ This is a minimalist API server that captures video from a commercial webcam con
 - Real-time video capture from webcam
 - Motion JPEG (MJPEG) streaming via HTTP
 - H.264 Segmented Recording (MP4) in the background
-- Configurable settings via `.env` file
+- Configurable settings via `config.toml` file
 - **Cross-Platform**: Runs on Linux (Raspberry Pi V4L2) and macOS (AVFoundation) for development.
 
 ## Tech Stack
@@ -48,7 +48,7 @@ Streams the webcam video in MJPEG format (`multipart/x-mixed-replace`).
 ### Development (macOS)
 
 1. Clone the repository.
-2. Create a `.env` file (see Configuration).
+2. Create a `config.toml` file (see Configuration).
 3. Run the server:
    ```bash
    cargo run
@@ -71,24 +71,24 @@ Streams the webcam video in MJPEG format (`multipart/x-mixed-replace`).
    ./target/release/pi-webcam-streamer
    ```
 
-## Configuration (.env)
+## Configuration (config.toml)
 
-Create a `.env` file in the project directory to customize settings.
+Create a `config.toml` file in the project directory to customize settings.
 
-```bash
+```toml
 # Camera Settings
-CAMERA_INDEX=0          # e.g., /dev/video0 or 0
-CAMERA_WIDTH=320        # Default: 320
-CAMERA_HEIGHT=240       # Default: 240
-CAMERA_FPS=5            # Default: 5
+camera_index = 0          # e.g., /dev/video0 or 0
+camera_width = 320        # Default: 320
+camera_height = 240       # Default: 240
+camera_fps = 5            # Default: 5
 
 # Server Settings
-PORT=8080               # Default: 8080
+port = 8080               # Default: 8080
 
 # Recording Settings (Optional)
-# If RECORDING_PATH is set, background recording is enabled.
-RECORDING_PATH=./recordings
-RECORDING_SEGMENT_MINUTES=10
+# If recording_path is set, background recording is enabled.
+recording_path = "./recordings"
+recording_segment_minutes = 10
 ```
 
 ## Running as a Service (systemd)
@@ -96,7 +96,10 @@ RECORDING_SEGMENT_MINUTES=10
 For production use, run as a systemd service.
 
 1. Install binary to `/opt/pi-webcam-streamer`.
-2. Copy `.env` to the same directory.
+2. Copy `config.toml` to `/etc/pi-webcam-streamer/config.toml` or the same directory.
+   The application looks for configuration in:
+   - `/etc/pi-webcam-streamer/config.toml`
+   - `./config.toml`
 3. Create service file `/etc/systemd/system/pi-webcam-streamer.service`:
 
 ```ini
