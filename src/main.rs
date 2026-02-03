@@ -8,10 +8,38 @@ use chrono::{Local, NaiveDateTime};
 use tokio::net::TcpListener;
 use tower_http::services::ServeDir;
 
+use clap::{Parser, Subcommand};
+
 mod camera;
 mod config;
 mod recorder;
 mod cleaner;
+mod service;
+
+#[derive(Parser)]
+#[command(name = "pi-webcam-streamer")]
+#[command(about = "A webcam streamer for Raspberry Pi", long_about = None)]
+struct Cli {
+    #[command(subcommand)]
+    command: Option<Commands>,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Manage systemd service
+    Service {
+        #[command(subcommand)]
+        command: ServiceCommands,
+    },
+}
+
+#[derive(Subcommand)]
+enum ServiceCommands {
+    /// Install the systemd service
+    Install,
+    /// Uninstall the systemd service
+    Uninstall,
+}
 
 #[derive(Clone)]
 struct AppState {
@@ -21,6 +49,26 @@ struct AppState {
 
 #[tokio::main]
 async fn main() {
+    let cli = Cli::parse();
+
+    match cli.command {
+        Some(Commands::Service { command }) => {
+            let result = match command {
+                ServiceCommands::Install => service::install_service(),
+                ServiceCommands::Uninstall => service::uninstall_service(),
+            };
+            if let Err(e) = result {
+                eprintln!("Error: {:#}", e);
+                std::process::exit(1);
+            }
+        }
+        None => {
+            run_server().await;
+        }
+    }
+}
+
+async fn run_server() {
     let config = config::Config::load();
     println!("Loaded config: {:?}", config);
 

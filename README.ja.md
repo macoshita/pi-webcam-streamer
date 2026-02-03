@@ -56,20 +56,37 @@ USB ウェブカメラからの映像をキャプチャし、HTTP 経由でス�
 
 ### デプロイ (Raspberry Pi)
 
-1. Raspberry Pi (ARM64) 用にクロスコンパイルします:
+1. **クロスコンパイル (ARM64)**:
    ```bash
-   # ターゲットの追加
    rustup target add aarch64-unknown-linux-gnu
-   
-   # ビルド (リンカーの設定が必要な場合があります。最も簡単なのは Pi 上で直接ビルドすることです)
    cargo build --release --target aarch64-unknown-linux-gnu
    ```
-   *注意: クロスコンパイル環境の構築が面倒な場合は、Raspberry Pi 4/5 上で直接ビルドすることをお勧めします。*
 
-2. バイナリを実行します:
+2. **インストール**:
+   バイナリを `/usr/local/bin` (または PATH の通ったディレクトリ) に配置します:
    ```bash
-   ./target/release/pi-webcam-streamer
+   sudo cp ./target/aarch64-unknown-linux-gnu/release/pi-webcam-streamer /usr/local/bin/
    ```
+
+3. **設定**:
+   ```bash
+   sudo mkdir -p /etc/pi-webcam-streamer
+   sudo cp config.toml /etc/pi-webcam-streamer/
+   ```
+
+4. **サービス管理 (systemd)**:
+   組み込みコマンドを使用して簡単にサービス登録・管理ができます:
+   ```bash
+   # サービス登録 (sudo が必要)
+   sudo pi-webcam-streamer service install
+   
+   # 確認
+   sudo systemctl status pi-webcam-streamer
+   
+   # サービス削除 (sudo が必要)
+   sudo pi-webcam-streamer service uninstall
+   ```
+   `service install` コマンドにより、`/etc/systemd/system/pi-webcam-streamer.service` にユニットファイルが自動生成され、サービスが開始されます。
 
 ## 設定 (config.toml)
 
@@ -89,33 +106,4 @@ port = 8080               # デフォルト: 8080
 # recording_path が設定されている場合、バックグラウンド録画が有効になります。
 recording_path = "./recordings"
 recording_segment_minutes = 10
-```
-
-## サービスとして実行 (systemd)
-
-本番環境では systemd サービスとして実行してください。
-
-1. バイナリを `/opt/pi-webcam-streamer` にインストールします。
-2. `config.toml` を `/etc/pi-webcam-streamer/config.toml` または同じディレクトリにコピーします。
-   アプリケーションは以下の順序で設定を探します:
-   - `/etc/pi-webcam-streamer/config.toml`
-   - `./config.toml`
-3. サービスファイル `/etc/systemd/system/pi-webcam-streamer.service` を作成します:
-
-```ini
-[Unit]
-Description=Pi Webcam Streamer Service
-After=network.target
-
-[Service]
-Type=simple
-User=pi
-Group=video
-WorkingDirectory=/opt/pi-webcam-streamer
-ExecStart=/opt/pi-webcam-streamer/pi-webcam-streamer
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
 ```

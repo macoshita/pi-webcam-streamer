@@ -56,20 +56,37 @@ Streams the webcam video in MJPEG format (`multipart/x-mixed-replace`).
 
 ### Deployment (Raspberry Pi)
 
-1. Cross-compile for Raspberry Pi (ARM64):
+1. **Cross-compile for Raspberry Pi (ARM64)**:
    ```bash
-   # Add target
    rustup target add aarch64-unknown-linux-gnu
-   
-   # Build (you may need a linker, or simpler: build on the Pi itself)
    cargo build --release --target aarch64-unknown-linux-gnu
    ```
-   *Note: Building directly on the Raspberry Pi 4/5 is often the easiest way if you don't want to set up a cross-compiler toolchain.*
 
-2. Run the binary:
+2. **Install binary**:
+   Move the binary to `/usr/local/bin` (or any directory in your PATH):
    ```bash
-   ./target/release/pi-webcam-streamer
+   sudo cp ./target/aarch64-unknown-linux-gnu/release/pi-webcam-streamer /usr/local/bin/
    ```
+
+3. **Configure**:
+   ```bash
+   sudo mkdir -p /etc/pi-webcam-streamer
+   sudo cp config.toml /etc/pi-webcam-streamer/
+   ```
+
+4. **Service Management (systemd)**:
+   Register and manage the service easily using the built-in commands:
+   ```bash
+   # Install service (requires sudo)
+   sudo pi-webcam-streamer service install
+   
+   # Start/Status
+   sudo systemctl status pi-webcam-streamer
+   
+   # Uninstall service (requires sudo)
+   sudo pi-webcam-streamer service uninstall
+   ```
+   The `service install` command automatically creates a systemd unit file at `/etc/systemd/system/pi-webcam-streamer.service` and enables the service.
 
 ## Configuration (config.toml)
 
@@ -89,33 +106,4 @@ port = 8080               # Default: 8080
 # If recording_path is set, background recording is enabled.
 recording_path = "./recordings"
 recording_segment_minutes = 10
-```
-
-## Running as a Service (systemd)
-
-For production use, run as a systemd service.
-
-1. Install binary to `/opt/pi-webcam-streamer`.
-2. Copy `config.toml` to `/etc/pi-webcam-streamer/config.toml` or the same directory.
-   The application looks for configuration in:
-   - `/etc/pi-webcam-streamer/config.toml`
-   - `./config.toml`
-3. Create service file `/etc/systemd/system/pi-webcam-streamer.service`:
-
-```ini
-[Unit]
-Description=Pi Webcam Streamer Service
-After=network.target
-
-[Service]
-Type=simple
-User=pi
-Group=video
-WorkingDirectory=/opt/pi-webcam-streamer
-ExecStart=/opt/pi-webcam-streamer/pi-webcam-streamer
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
 ```
