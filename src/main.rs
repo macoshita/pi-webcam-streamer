@@ -21,7 +21,7 @@ struct AppState {
 
 #[tokio::main]
 async fn main() {
-    let config = config::Config::from_env();
+    let config = config::Config::load();
     println!("Loaded config: {:?}", config);
 
     // Start camera capture

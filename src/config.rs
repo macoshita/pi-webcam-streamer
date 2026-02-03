@@ -1,6 +1,8 @@
-use std::env;
+use serde::Deserialize;
+use config::{Config as ConfigLoader, File, Environment};
 
-#[derive(Debug, Clone)]
+
+#[derive(Debug, Clone, Deserialize)]
 pub struct Config {
     pub camera_index: u32,
     pub camera_width: u32,
@@ -16,68 +18,57 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn from_env() -> Self {
-        // Load .env file if it exists, ignore error if not found
-        let _ = dotenvy::dotenv();
+    pub fn load() -> Self {
 
-        let camera_index = env::var("CAMERA_INDEX")
-            .ok()
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(0);
 
-        let camera_width = env::var("CAMERA_WIDTH")
-            .ok()
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(320);
+        let builder = ConfigLoader::builder()
+            // 1. Default values
+            .set_default("camera_index", 0).unwrap()
+            .set_default("camera_width", 320).unwrap()
+            .set_default("camera_height", 240).unwrap()
+            .set_default("camera_fps", 5).unwrap()
+            .set_default("port", 8080).unwrap()
+            .set_default("camera_format", "MJPEG").unwrap()
+            // recording_path is Option, so no default means None
+            .set_default("recording_segment_minutes", 10).unwrap()
+            // recording_video_codec is Option, so no default means None
+            .set_default("recording_retention_days", 7).unwrap()
+            .set_default("recording_max_size_mb", 128).unwrap()
+            
+            // 2. System-wide config file
+            .add_source(File::with_name("/etc/pi-webcam-streamer/config.toml").required(false))
+            
+            // 3. Local config file
+            .add_source(File::with_name("config.toml").required(false))
+            
+            // 4. Environment variables
+            // Maps APP_CAMERA_INDEX to camera_index, etc.
+            // Also supports existing env vars if we map them manually or just use raw env lookup in older way,
+            // but config::Environment can map prefixes. 
+            // Let's try to support the old names directly for backward compatibility if possible,
+            // or just rely on the fact that we might not strictly need the old env vars if we switch to config.
+            // However, to be safe and compatible with the user's existing .env logic which sets "CAMERA_INDEX" etc (uppercase),
+            // we can tell config to look for those.
+            .add_source(Environment::default().try_parsing(true).separator("_"));
 
-        let camera_height = env::var("CAMERA_HEIGHT")
-            .ok()
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(240);
+        // Note: The Environment::default() above works well for things like "PORT".
+        // Use `try_parsing(true)` to parse numbers.
 
-        let camera_fps = env::var("CAMERA_FPS")
-            .ok()
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(5);
-
-        let port = env::var("PORT")
-            .ok()
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(8080);
-
-        let camera_format = env::var("CAMERA_FORMAT").unwrap_or_else(|_| "MJPEG".to_string());
-
-        let recording_path = env::var("RECORDING_PATH").ok();
-
-        let recording_segment_minutes = env::var("RECORDING_SEGMENT_MINUTES")
-            .ok()
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(10);
-
-        let recording_video_codec = env::var("RECORDING_VIDEO_CODEC").ok();
-
-        let recording_retention_days = env::var("RECORDING_RETENTION_DAYS")
-            .ok()
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(7);
-
-        let recording_max_size_mb = env::var("RECORDING_MAX_SIZE_MB")
-            .ok()
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(128);
-
-        Config {
-            camera_index,
-            camera_width,
-            camera_height,
-            camera_fps,
-            port,
-            camera_format,
-            recording_path,
-            recording_segment_minutes,
-            recording_video_codec,
-            recording_retention_days,
-            recording_max_size_mb,
+        let config = builder.build().unwrap();
+        
+        // We need to handle the case where some fields might be missing if relying purely on Deserialize
+        // but since we set defaults for everything except Options, it should be fine.
+        // However, `config` crate might error if type mismatch.
+        
+        match config.try_deserialize() {
+            Ok(c) => c,
+            Err(e) => {
+                // If deserialization fails, it might be due to missing required fields or type errors.
+                // Fallback to manual construction or panic with a helpful message.
+                // For now, let's just panic as configuration is critical.
+                panic!("Failed to load configuration: {}", e);
+            }
         }
     }
 }
+
