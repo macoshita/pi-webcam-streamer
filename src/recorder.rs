@@ -131,7 +131,7 @@ impl Recorder {
             "-f", "segment",
             "-segment_time", &segment_time,
             "-strftime", "1",
-            "-segment_format_options", "movflags=frag_keyframe+empty_moov+default_base_moof",
+            "-segment_format_options", "movflags=frag_keyframe+default_base_moof",
             &output_pattern,
         ]);
 
