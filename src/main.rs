@@ -1,9 +1,11 @@
 use axum::{
     extract::State,
-    response::Html,
+    http::StatusCode,
+    response::{Html, IntoResponse, Response},
     routing::get,
     Router,
 };
+use askama::Template;
 use chrono::{Local, NaiveDateTime};
 use tokio::net::TcpListener;
 use tower_http::services::ServeDir;
@@ -45,6 +47,48 @@ enum ServiceCommands {
 struct AppState {
     frame_rx: camera::FrameReceiver,
     recording_path: Option<String>,
+}
+
+#[derive(Template)]
+#[template(path = "index.html")]
+struct IndexTemplate;
+
+impl IntoResponse for IndexTemplate {
+    fn into_response(self) -> Response {
+        match self.render() {
+            Ok(html) => Html(html).into_response(),
+            Err(err) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to render template: {}", err),
+            )
+                .into_response(),
+        }
+    }
+}
+
+#[derive(Template)]
+#[template(path = "recordings.html")]
+struct RecordingsTemplate {
+    recordings: Vec<RecordingEntry>,
+}
+
+impl IntoResponse for RecordingsTemplate {
+    fn into_response(self) -> Response {
+        match self.render() {
+            Ok(html) => Html(html).into_response(),
+            Err(err) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to render template: {}", err),
+            )
+                .into_response(),
+        }
+    }
+}
+
+struct RecordingEntry {
+    file_name: String,
+    formatted_date: String,
+    ago: String,
 }
 
 #[tokio::main]
@@ -146,77 +190,19 @@ async fn stream_handler(
 
     let body = Body::from_stream(stream);
 
+
     axum::response::Response::builder()
         .header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
         .body(body)
         .unwrap()
 }
 
-async fn index_handler() -> Html<&'static str> {
-    Html(
-        r#"<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Webcam Stream</title>
-    <style>
-        body { font-family: Arial, sans-serif; max-width: 800px; margin: 20px auto; padding: 0 10px; text-align: center; background-color: #f4f4f9; }
-        h1 { color: #333; font-size: 1.5rem; margin-bottom: 20px; }
-        img { max-width: 100%; height: auto; border: 2px solid #333; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        .nav { margin-bottom: 20px; padding: 10px; background: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); display: inline-block; }
-        .nav a { margin: 0 10px; color: #007bff; text-decoration: none; font-weight: bold; font-size: 1.1rem; padding: 10px; }
-        .nav a:hover { text_decoration: underline; color: #0056b3; }
-        .nav a.active { color: #333; pointer-events: none; text-decoration: none; border-bottom: 2px solid #333; }
-        @media (max-width: 600px) {
-            /* Keep nav inline */
-        }
-    </style>
-</head>
-<body>
-    <div class="nav">
-        <a href="/" class="active">ライブ映像</a>
-        <a href="/recordings">録画</a>
-    </div>
-    <img src="/stream" alt="Webcam Stream">
-</body>
-</html>"#,
-    )
+async fn index_handler() -> IndexTemplate {
+    IndexTemplate
 }
 
-async fn recordings_handler(State(state): State<AppState>) -> Html<String> {
-    let mut html = String::from(
-        r#"<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Recordings</title>
-    <style>
-        body { font-family: Arial, sans-serif; max-width: 800px; margin: 20px auto; padding: 0 10px; text-align: center; background-color: #f4f4f9; }
-        h1 { color: #333; font-size: 1.5rem; margin-bottom: 20px; }
-        .nav { margin-bottom: 20px; padding: 10px; background: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); display: inline-block; }
-        .nav a { margin: 0 10px; color: #007bff; text-decoration: none; font-weight: bold; font-size: 1.1rem; padding: 10px; }
-        .nav a:hover { text_decoration: underline; color: #0056b3; }
-        .nav a.active { color: #333; pointer-events: none; text-decoration: none; border-bottom: 2px solid #333; }
-        ul { list-style: none; padding: 0; max-width: 600px; margin: 0 auto; }
-        li { margin: 10px 0; background: #fff; border-radius: 8px; padding: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); text-align: left; }
-        a.file { text-decoration: none; color: #333; font-size: 1.1em; display: block; }
-        a.file:hover { color: #007bff; }
-        .time { font-size: 0.9em; color: #666; display: block; margin-top: 5px; }
-        @media (max-width: 600px) {
-            /* Keep nav inline */
-        }
-    </style>
-</head>
-<body>
-    <div class="nav">
-        <a href="/">ライブ映像</a>
-        <a href="/recordings" class="active">録画</a>
-    </div>
-    <ul>
-"#,
-    );
+async fn recordings_handler(State(state): State<AppState>) -> RecordingsTemplate {
+    let mut recordings = Vec::new();
 
     if let Some(path) = state.recording_path {
         let mut entries = Vec::new();
@@ -234,40 +220,28 @@ async fn recordings_handler(State(state): State<AppState>) -> Html<String> {
         // Sort descending (newest first)
         entries.sort_by(|a, b| b.1.cmp(&a.1));
 
-        if entries.is_empty() {
-             html.push_str("<li>No recordings found.</li>");
-        } else {
-            let now = Local::now().naive_local();
-            for (file_name, dt) in entries {
-                let diff = now.signed_duration_since(dt);
-                let ago = if diff.num_minutes() < 1 {
-                    "たった今".to_string()
-                } else if diff.num_minutes() < 60 {
-                    format!("{}分前", diff.num_minutes())
-                } else if diff.num_hours() < 24 {
-                    format!("{}時間前", diff.num_hours())
-                } else {
-                    format!("{}日前", diff.num_days())
-                };
-                
-                let formatted_date = dt.format("%m月%d日 %H時%M分").to_string();
+        let now = Local::now().naive_local();
+        for (file_name, dt) in entries {
+            let diff = now.signed_duration_since(dt);
+            let ago = if diff.num_minutes() < 1 {
+                "たった今".to_string()
+            } else if diff.num_minutes() < 60 {
+                format!("{}分前", diff.num_minutes())
+            } else if diff.num_hours() < 24 {
+                format!("{}時間前", diff.num_hours())
+            } else {
+                format!("{}日前", diff.num_days())
+            };
+            
+            let formatted_date = dt.format("%m月%d日 %H時%M分").to_string();
 
-                html.push_str(&format!(
-                    r#"<li><a href="/videos/{}" class="file" target="_blank">{} <span class="time">({})</span></a></li>"#,
-                    file_name, formatted_date, ago
-                ));
-            }
+            recordings.push(RecordingEntry {
+                file_name,
+                formatted_date,
+                ago,
+            });
         }
-    } else {
-        html.push_str("<p>Recording is disabled.</p>");
     }
 
-    html.push_str(
-        r#"
-    </ul>
-</body>
-</html>"#,
-    );
-
-    Html(html)
+    RecordingsTemplate { recordings }
 }
