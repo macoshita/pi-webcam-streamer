@@ -89,7 +89,7 @@ impl Recorder {
 
     fn spawn_ffmpeg(&self, path: &str) -> std::io::Result<Child> {
         let fps = self.fps.to_string();
-        let segment_time = (self.config.recording_segment_minutes * 60).to_string();
+        let segment_time = self.config.recording_segment_seconds.to_string();
         let output_pattern = format!("{}/%Y%m%d_%H%M%S.mp4", path);
 
         let mut cmd = Command::new("ffmpeg");
@@ -115,6 +115,8 @@ impl Recorder {
         cmd.args(&["-c:v", video_codec]);
         
         // Force keyframe every 2 seconds for better streaming/segmentat
+        // Or exactly match segment time if it's small? 
+        // For HLS, having GOP aligned with segments is good, but fixed 2s is usually fine.
         let gop = (self.config.camera_fps * 2).to_string();
         cmd.args(&["-g", &gop]);
 
@@ -124,6 +126,17 @@ impl Recorder {
         } else if video_codec == "libx264" {
             // Software encoding
             cmd.args(&["-preset", "ultrafast"]);
+        }
+
+        // HLS Playlist generation
+        if self.config.recording_enable_hls {
+            let playlist_path = format!("{}/playlist.m3u8", path);
+            cmd.args(&[
+                "-segment_list", &playlist_path,
+                "-segment_list_flags", "+live",
+                "-segment_list_size", "0", // Keep all segments in playlist
+                "-segment_list_type", "m3u8",
+            ]);
         }
 
         // Segmentation

@@ -153,7 +153,8 @@ async fn run_server() {
     let mut app = Router::new()
         .route("/", get(index_handler))
         .route("/stream", get(stream_handler))
-        .route("/recordings", get(recordings_handler));
+        .route("/recordings", get(recordings_handler))
+        .route("/player", get(player_handler));
 
     if let Some(path) = config.recording_path {
         app = app.nest_service("/videos", ServeDir::new(path));
@@ -199,6 +200,27 @@ async fn stream_handler(
 
 async fn index_handler() -> IndexTemplate {
     IndexTemplate
+}
+
+#[derive(Template)]
+#[template(path = "player.html")]
+struct PlayerTemplate;
+
+impl IntoResponse for PlayerTemplate {
+    fn into_response(self) -> Response {
+        match self.render() {
+            Ok(html) => Html(html).into_response(),
+            Err(err) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to render template: {}", err),
+            )
+                .into_response(),
+        }
+    }
+}
+
+async fn player_handler() -> PlayerTemplate {
+    PlayerTemplate
 }
 
 async fn recordings_handler(State(state): State<AppState>) -> RecordingsTemplate {

@@ -11,7 +11,8 @@ pub struct Config {
     pub port: u16,
     pub camera_format: String,
     pub recording_path: Option<String>,
-    pub recording_segment_minutes: u32,
+    pub recording_enable_hls: bool,
+    pub recording_segment_seconds: u64,
     pub recording_video_codec: Option<String>,
     pub recording_retention_days: u64,
     pub recording_max_size_mb: u64,
@@ -29,8 +30,10 @@ impl Config {
             .set_default("camera_fps", 5).unwrap()
             .set_default("port", 8080).unwrap()
             .set_default("camera_format", "MJPEG").unwrap()
+            .set_default("camera_format", "MJPEG").unwrap()
             // recording_path is Option, so no default means None
-            .set_default("recording_segment_minutes", 10).unwrap()
+            .set_default("recording_enable_hls", true).unwrap()
+            .set_default("recording_segment_seconds", 10).unwrap()
             // recording_video_codec is Option, so no default means None
             .set_default("recording_retention_days", 7).unwrap()
             .set_default("recording_max_size_mb", 128).unwrap()
