@@ -6,7 +6,6 @@ use axum::{
     Router,
 };
 use askama::Template;
-use chrono::{Local, NaiveDateTime};
 use tokio::net::TcpListener;
 use tower_http::services::ServeDir;
 
@@ -46,7 +45,6 @@ enum ServiceCommands {
 #[derive(Clone)]
 struct AppState {
     frame_rx: camera::FrameReceiver,
-    recording_path: Option<String>,
 }
 
 #[derive(Template)]
@@ -64,31 +62,6 @@ impl IntoResponse for IndexTemplate {
                 .into_response(),
         }
     }
-}
-
-#[derive(Template)]
-#[template(path = "recordings.html")]
-struct RecordingsTemplate {
-    recordings: Vec<RecordingEntry>,
-}
-
-impl IntoResponse for RecordingsTemplate {
-    fn into_response(self) -> Response {
-        match self.render() {
-            Ok(html) => Html(html).into_response(),
-            Err(err) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to render template: {}", err),
-            )
-                .into_response(),
-        }
-    }
-}
-
-struct RecordingEntry {
-    file_name: String,
-    formatted_date: String,
-    ago: String,
 }
 
 #[tokio::main]
@@ -146,15 +119,13 @@ async fn run_server() {
 
     let state = AppState {
         frame_rx,
-        recording_path: config.recording_path.clone(),
     };
 
     // Build our application
     let mut app = Router::new()
         .route("/", get(index_handler))
         .route("/stream", get(stream_handler))
-        .route("/recordings", get(recordings_handler))
-        .route("/player", get(player_handler));
+        .route("/recordings", get(recordings_handler));
 
     if let Some(path) = config.recording_path {
         app = app.nest_service("/videos", ServeDir::new(path));
@@ -203,10 +174,10 @@ async fn index_handler() -> IndexTemplate {
 }
 
 #[derive(Template)]
-#[template(path = "player.html")]
-struct PlayerTemplate;
+#[template(path = "recordings.html")]
+struct RecordingsTemplate;
 
-impl IntoResponse for PlayerTemplate {
+impl IntoResponse for RecordingsTemplate {
     fn into_response(self) -> Response {
         match self.render() {
             Ok(html) => Html(html).into_response(),
@@ -219,51 +190,6 @@ impl IntoResponse for PlayerTemplate {
     }
 }
 
-async fn player_handler() -> PlayerTemplate {
-    PlayerTemplate
-}
-
-async fn recordings_handler(State(state): State<AppState>) -> RecordingsTemplate {
-    let mut recordings = Vec::new();
-
-    if let Some(path) = state.recording_path {
-        let mut entries = Vec::new();
-        if let Ok(mut read_dir) = tokio::fs::read_dir(&path).await {
-            while let Ok(Some(entry)) = read_dir.next_entry().await {
-                if let Ok(file_name) = entry.file_name().into_string() {
-                    if let Some(stem) = file_name.strip_suffix(".mp4") {
-                        if let Ok(dt) = NaiveDateTime::parse_from_str(stem, "%Y%m%d_%H%M%S") {
-                            entries.push((file_name, dt));
-                        }
-                    }
-                }
-            }
-        }
-        // Sort descending (newest first)
-        entries.sort_by(|a, b| b.1.cmp(&a.1));
-
-        let now = Local::now().naive_local();
-        for (file_name, dt) in entries {
-            let diff = now.signed_duration_since(dt);
-            let ago = if diff.num_minutes() < 1 {
-                "たった今".to_string()
-            } else if diff.num_minutes() < 60 {
-                format!("{}分前", diff.num_minutes())
-            } else if diff.num_hours() < 24 {
-                format!("{}時間前", diff.num_hours())
-            } else {
-                format!("{}日前", diff.num_days())
-            };
-            
-            let formatted_date = dt.format("%m月%d日 %H時%M分").to_string();
-
-            recordings.push(RecordingEntry {
-                file_name,
-                formatted_date,
-                ago,
-            });
-        }
-    }
-
-    RecordingsTemplate { recordings }
+async fn recordings_handler() -> RecordingsTemplate {
+    RecordingsTemplate
 }

@@ -3,19 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Recordings</title>
+    <title>Video Player</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <style>
         body { font-family: Arial, sans-serif; max-width: 800px; margin: 20px auto; padding: 0 10px; text-align: center; background-color: #f4f4f9; }
         h1 { color: #333; font-size: 1.5rem; margin-bottom: 20px; }
+        video { max-width: 100%; height: auto; border: 2px solid #333; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); background-color: #000; }
         .nav { margin-bottom: 20px; padding: 10px; background: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); display: inline-block; }
         .nav a { margin: 0 10px; color: #007bff; text-decoration: none; font-weight: bold; font-size: 1.1rem; padding: 10px; }
         .nav a:hover { text-decoration: underline; color: #0056b3; }
         .nav a.active { color: #333; pointer-events: none; text-decoration: none; border-bottom: 2px solid #333; }
-        ul { list-style: none; padding: 0; max-width: 600px; margin: 0 auto; }
-        li { margin: 10px 0; background: #fff; border-radius: 8px; padding: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); text-align: left; }
-        a.file { text-decoration: none; color: #333; font-size: 1.1em; display: block; }
-        a.file:hover { color: #007bff; }
-        .time { font-size: 0.9em; color: #666; display: block; margin-top: 5px; }
         @media (max-width: 600px) {
             /* Keep nav inline */
         }
@@ -24,19 +21,51 @@
 <body>
     <div class="nav">
         <a href="/">ライブ映像</a>
-        <a href="/recordings" class="active">録画</a>
+        <a href="/recordings" class="active">録画再生</a>
     </div>
-    <div style="margin-bottom: 20px;">
-        <a href="/player" style="display: inline-block; padding: 10px 20px; background-color: #28a745; color: white; text-decoration: none; border-radius: 5px; font-weight: bold;">▶︎ すべて再生 (ストリーミング)</a>
-    </div>
-    <ul>
-        {% if recordings.is_empty() %}
-            <li>No recordings found.</li>
-        {% else %}
-            {% for recording in recordings %}
-            <li><a href="/videos/{{ recording.file_name }}" class="file" target="_blank">{{ recording.formatted_date }} <span class="time">({{ recording.ago }})</span></a></li>
-            {% endfor %}
-        {% endif %}
-    </ul>
+    <video id="video" controls autoplay></video>
+    <script>
+        var video = document.getElementById('video');
+        var videoSrc = '/videos/playlist.m3u8';
+        if (Hls.isSupported()) {
+            var hls = new Hls({
+                debug: false,
+                enableWorker: true,
+                lowLatencyMode: true,
+                backBufferLength: 90
+            });
+            hls.loadSource(videoSrc);
+            hls.attachMedia(video);
+            hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                video.play().catch(function(e) {
+                    console.log("Auto-play prevented: " + e);
+                });
+            });
+            hls.on(Hls.Events.ERROR, function (event, data) {
+                if (data.fatal) {
+                    switch (data.type) {
+                    case Hls.ErrorTypes.NETWORK_ERROR:
+                        // try to recover network error
+                        console.log("fatal network error encountered, try to recover");
+                        hls.startLoad();
+                        break;
+                    case Hls.ErrorTypes.MEDIA_ERROR:
+                        console.log("fatal media error encountered, try to recover");
+                        hls.recoverMediaError();
+                        break;
+                    default:
+                        // cannot recover
+                        hls.destroy();
+                        break;
+                    }
+                }
+            });
+        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+            video.src = videoSrc;
+            video.addEventListener('loadedmetadata', function() {
+                video.play();
+            });
+        }
+    </script>
 </body>
 </html>
