@@ -1,13 +1,10 @@
 use axum::{
     extract::State,
-    http::StatusCode,
-    response::{Html, IntoResponse, Response},
     routing::get,
     Router,
 };
-use askama::Template;
 use tokio::net::TcpListener;
-use tower_http::services::ServeDir;
+use tower_http::services::{ServeDir, ServeFile};
 
 use clap::{Parser, Subcommand};
 
@@ -45,23 +42,6 @@ enum ServiceCommands {
 #[derive(Clone)]
 struct AppState {
     frame_rx: camera::FrameReceiver,
-}
-
-#[derive(Template)]
-#[template(path = "index.html")]
-struct IndexTemplate;
-
-impl IntoResponse for IndexTemplate {
-    fn into_response(self) -> Response {
-        match self.render() {
-            Ok(html) => Html(html).into_response(),
-            Err(err) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to render template: {}", err),
-            )
-                .into_response(),
-        }
-    }
 }
 
 #[tokio::main]
@@ -121,15 +101,17 @@ async fn run_server() {
         frame_rx,
     };
 
-    // Build our application
+    // Build our application with API routes
     let mut app = Router::new()
-        .route("/", get(index_handler))
-        .route("/stream", get(stream_handler))
-        .route("/recordings", get(recordings_handler));
+        .route("/api/stream", get(stream_handler));
 
     if let Some(path) = config.recording_path {
-        app = app.nest_service("/videos", ServeDir::new(path));
+        app = app.nest_service("/api/videos", ServeDir::new(path));
     }
+
+    // Serve SPA frontend from frontend/build
+    let spa_fallback = ServeFile::new("frontend/build/index.html");
+    app = app.fallback_service(ServeDir::new("frontend/build").fallback(spa_fallback));
 
     let app = app.with_state(state);
 
@@ -167,29 +149,4 @@ async fn stream_handler(
         .header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
         .body(body)
         .unwrap()
-}
-
-async fn index_handler() -> IndexTemplate {
-    IndexTemplate
-}
-
-#[derive(Template)]
-#[template(path = "recordings.html")]
-struct RecordingsTemplate;
-
-impl IntoResponse for RecordingsTemplate {
-    fn into_response(self) -> Response {
-        match self.render() {
-            Ok(html) => Html(html).into_response(),
-            Err(err) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to render template: {}", err),
-            )
-                .into_response(),
-        }
-    }
-}
-
-async fn recordings_handler() -> RecordingsTemplate {
-    RecordingsTemplate
 }
