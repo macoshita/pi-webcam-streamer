@@ -1,7 +1,6 @@
 use tokio::io::AsyncWriteExt;
 use tokio::process::{Child, Command};
 use tokio::sync::watch;
-use crate::cleaner::Cleaner;
 use crate::config::Config;
 use std::process::Stdio;
 use std::sync::Arc;
@@ -29,21 +28,9 @@ impl Recorder {
                 return;
             }
 
-            // Start cleanup task
-            let cleaner = Cleaner::new(self.config.clone());
-            tokio::spawn(async move {
-                loop {
-                    cleaner.cleanup().await;
-                    tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
-                }
-            });
-
             let mut process: Option<Child> = None;
 
             loop {
-                // Check signal to change file or just loop forever
-                // Actually the receiver loop drives the logic
-                
                 // If process is not running, start it
                 if process.is_none() {
                     match self.spawn_ffmpeg(recording_path) {
@@ -90,7 +77,9 @@ impl Recorder {
     fn spawn_ffmpeg(&self, path: &str) -> std::io::Result<Child> {
         let fps = self.fps.to_string();
         let segment_time = self.config.recording_segment_seconds.to_string();
-        let output_pattern = format!("{}/%Y%m%d_%H%M%S.mp4", path);
+        let playlist_path = format!("{}/playlist.m3u8", path);
+        let segment_pattern = format!("{}/%Y%m%d_%H%M%S.mp4", path);
+        let hls_list_size = self.config.hls_list_size().to_string();
 
         let mut cmd = Command::new("ffmpeg");
         
@@ -114,9 +103,7 @@ impl Recorder {
 
         cmd.args(&["-c:v", video_codec]);
         
-        // Force keyframe every 2 seconds for better streaming/segmentat
-        // Or exactly match segment time if it's small? 
-        // For HLS, having GOP aligned with segments is good, but fixed 2s is usually fine.
+        // GOP: keyframe every 2 seconds, aligns well with HLS segments
         let gop = (self.config.camera_fps * 2).to_string();
         cmd.args(&["-g", &gop]);
 
@@ -128,28 +115,19 @@ impl Recorder {
             cmd.args(&["-preset", "ultrafast"]);
         }
 
-        // HLS Playlist generation
-        if self.config.recording_enable_hls {
-            let playlist_path = format!("{}/playlist.m3u8", path);
-            cmd.args(&[
-                "-segment_list", &playlist_path,
-                "-segment_list_flags", "+live",
-                "-segment_list_size", "0", // Keep all segments in playlist
-                "-segment_list_type", "m3u8",
-            ]);
-        }
-
-        // Segmentation
+        // HLS output with automatic segment cleanup
         cmd.args(&[
-            "-f", "segment",
-            "-segment_time", &segment_time,
+            "-f", "hls",
+            "-hls_time", &segment_time,
+            "-hls_segment_type", "fmp4",
+            "-hls_flags", "independent_segments+append_list+delete_segments",
+            "-hls_segment_filename", &segment_pattern,
             "-strftime", "1",
-            "-segment_format_options", "movflags=frag_keyframe+default_base_moof",
-            &output_pattern,
+            "-hls_list_size", &hls_list_size,
+            &playlist_path,
         ]);
 
         cmd.stdin(Stdio::piped());
-        // cmd.stdout(Stdio::inherit()); // Useful for debug
         cmd.stderr(Stdio::inherit()); 
 
         cmd.spawn()

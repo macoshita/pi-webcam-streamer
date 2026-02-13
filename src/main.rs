@@ -11,7 +11,6 @@ use clap::{Parser, Subcommand};
 mod camera;
 mod config;
 mod recorder;
-mod cleaner;
 mod service;
 
 #[derive(Parser)]
