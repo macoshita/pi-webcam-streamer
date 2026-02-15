@@ -3,6 +3,8 @@
   import Hls from "hls.js";
   import { Play, Pause } from "lucide-svelte";
 
+  import { settings } from "$lib/stores/settings.svelte";
+
   let videoElement: HTMLVideoElement;
   let seekBar: HTMLInputElement;
   let hls: Hls | undefined;
@@ -190,18 +192,11 @@
 </script>
 
 <svelte:head>
-  <title>録画再生</title>
+  <title>{settings.t.recordings}</title>
 </svelte:head>
 
 <div class="card bg-base-100 shadow-xl overflow-hidden">
   <div class="relative bg-black">
-    {#if currentDateTime}
-      <div class="absolute top-4 left-4 z-10">
-        <div class="badge badge-neutral gap-2 font-mono opacity-80">
-          {currentDateTime}
-        </div>
-      </div>
-    {/if}
     <!-- svelte-ignore a11y_media_has_caption -->
     <video
       bind:this={videoElement}
@@ -212,6 +207,14 @@
       on:pause={() => (isPlaying = false)}
       class="w-full h-auto max-h-[70vh] object-contain mx-auto"
     ></video>
+
+    {#if currentDateTime}
+      <div class="absolute top-2 left-2">
+        <div class="badge badge-neutral gap-2 font-mono opacity-80">
+          {currentDateTime}
+        </div>
+      </div>
+    {/if}
   </div>
 
   <div class="p-4 bg-base-200 flex items-center gap-4">
