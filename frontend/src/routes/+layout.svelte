@@ -1,37 +1,37 @@
 <script lang="ts">
-	import { page } from "$app/state";
-	import { browser } from "$app/environment";
-	import { Video, Film, Settings as SettingsIcon, Check } from "lucide-svelte";
-	import { settings } from "$lib/stores/settings.svelte";
-	import "../app.css";
+import { Check, Film, Settings as SettingsIcon, Video } from "lucide-svelte";
+import { browser } from "$app/environment";
+import { page } from "$app/state";
+import { settings } from "$lib/stores/settings.svelte";
+import "../app.css";
 
-	let { children } = $props();
+const { children } = $props();
 
-	$effect(() => {
-		if (!browser) return;
+$effect(() => {
+  if (!browser) return;
 
-		localStorage.setItem("language", settings.language);
-		localStorage.setItem("theme", settings.theme);
+  localStorage.setItem("language", settings.language);
+  localStorage.setItem("theme", settings.theme);
 
-		const updateTheme = () => {
-			let theme = settings.theme;
-			if (theme === "system") {
-				theme = window.matchMedia("(prefers-color-scheme: dark)").matches
-					? "dark"
-					: "light";
-			}
-			document.documentElement.setAttribute("data-theme", theme);
-		};
+  const updateTheme = () => {
+    let theme = settings.theme;
+    if (theme === "system") {
+      theme = window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark"
+        : "light";
+    }
+    document.documentElement.setAttribute("data-theme", theme);
+  };
 
-		updateTheme();
+  updateTheme();
 
-		const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-		const handleChange = () => {
-			if (settings.theme === "system") updateTheme();
-		};
-		mediaQuery.addEventListener("change", handleChange);
-		return () => mediaQuery.removeEventListener("change", handleChange);
-	});
+  const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+  const handleChange = () => {
+    if (settings.theme === "system") updateTheme();
+  };
+  mediaQuery.addEventListener("change", handleChange);
+  return () => mediaQuery.removeEventListener("change", handleChange);
+});
 </script>
 
 <svelte:head>

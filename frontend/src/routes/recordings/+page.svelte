@@ -1,194 +1,196 @@
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
-  import Hls from "hls.js";
-  import { Play, Pause } from "lucide-svelte";
+import Hls from "hls.js";
+import { Pause, Play } from "lucide-svelte";
+import { onDestroy, onMount } from "svelte";
 
-  import { settings } from "$lib/stores/settings.svelte";
+import { settings } from "$lib/stores/settings.svelte";
 
-  let videoElement: HTMLVideoElement;
-  let seekBar: HTMLInputElement;
-  let hls: Hls | undefined;
-  let currentDateTime = "";
-  let isPlaying = false;
-  let duration = 0;
-  let currentTime = 0;
-  let isSeeking = false;
+let videoElement: HTMLVideoElement;
+let seekBar: HTMLInputElement;
+let hls: Hls | undefined;
+let currentDateTime = "";
+let isPlaying = false;
+let duration = 0;
+let currentTime = 0;
+let isSeeking = false;
 
-  // セグメントの実際の開始日時（Dateオブジェクト）とHLSタイムライン上の開始時間
-  // FRAG_CHANGED で更新されるので、配列として全セグメント情報を保持
-  type SegmentInfo = { hlsStart: number; date: Date };
-  let segments: SegmentInfo[] = [];
+// セグメントの実際の開始日時（Dateオブジェクト）とHLSタイムライン上の開始時間
+// FRAG_CHANGED で更新されるので、配列として全セグメント情報を保持
+type SegmentInfo = { hlsStart: number; date: Date };
+let segments: SegmentInfo[] = [];
 
-  // ライブエッジからのマージン（秒）。この分だけシーク可能範囲を縮める
-  const LIVE_EDGE_MARGIN = 30;
+// ライブエッジからのマージン（秒）。この分だけシーク可能範囲を縮める
+const LIVE_EDGE_MARGIN = 30;
 
-  function parseSegmentDate(url: string): Date | null {
-    const match = url.match(/(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})\.mp4/);
-    if (!match) return null;
-    const [, year, month, day, hour, min, sec] = match;
-    return new Date(+year, +month - 1, +day, +hour, +min, +sec);
-  }
+function parseSegmentDate(url: string): Date | null {
+  const match = url.match(/(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})\.mp4/);
+  if (!match) return null;
+  const [, year, month, day, hour, min, sec] = match;
+  return new Date(+year, +month - 1, +day, +hour, +min, +sec);
+}
 
-  function formatDateTime(date: Date): string {
-    const pad = (n: number) => n.toString().padStart(2, "0");
-    return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
-  }
+function formatDateTime(date: Date): string {
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
 
-  /** 最大シーク可能時間: duration から LIVE_EDGE_MARGIN を引いた値 */
-  function safeMaxTime(): number {
-    if (!duration || !isFinite(duration)) return 0;
-    return Math.max(0, duration - LIVE_EDGE_MARGIN);
-  }
+/** 最大シーク可能時間: duration から LIVE_EDGE_MARGIN を引いた値 */
+function safeMaxTime(): number {
+  if (!duration || !Number.isFinite(duration)) return 0;
+  return Math.max(0, duration - LIVE_EDGE_MARGIN);
+}
 
-  /** HLSタイムライン上の時刻から実際の撮影日時へ変換 */
-  function hlsTimeToDate(t: number): Date | null {
-    if (segments.length === 0) return null;
-    // tに最も近い（それ以前の）セグメントを探す
-    let best: SegmentInfo | null = null;
-    for (const seg of segments) {
-      if (seg.hlsStart <= t) {
-        best = seg;
-      } else {
-        break;
-      }
-    }
-    if (!best) best = segments[0];
-    const offset = t - best.hlsStart;
-    return new Date(best.date.getTime() + offset * 1000);
-  }
-
-  function handleTimeUpdate() {
-    if (!videoElement) return;
-    currentTime = videoElement.currentTime;
-    isPlaying = !videoElement.paused;
-
-    const date = hlsTimeToDate(currentTime);
-    if (date) {
-      currentDateTime = formatDateTime(date);
-    }
-
-    // シークバー操作中でなければ値を同期（DOM直接操作）
-    if (!isSeeking && seekBar) {
-      seekBar.max = String(safeMaxTime());
-      seekBar.value = String(currentTime);
-    }
-  }
-
-  function handleDurationChange() {
-    if (videoElement) {
-      duration = videoElement.duration || 0;
-    }
-  }
-
-  function togglePlayPause() {
-    if (!videoElement) return;
-    if (videoElement.paused) {
-      videoElement.play().catch(() => {});
+/** HLSタイムライン上の時刻から実際の撮影日時へ変換 */
+function hlsTimeToDate(t: number): Date | null {
+  if (segments.length === 0) return null;
+  // tに最も近い（それ以前の）セグメントを探す
+  let best: SegmentInfo | null = null;
+  for (const seg of segments) {
+    if (seg.hlsStart <= t) {
+      best = seg;
     } else {
-      videoElement.pause();
-    }
-    isPlaying = !videoElement.paused;
-  }
-
-  function onSeekStart() {
-    isSeeking = true;
-  }
-
-  function onSeekInput(e: Event) {
-    const target = e.target as HTMLInputElement;
-    const val = parseFloat(target.value);
-    // ライブエッジを越えないようにクランプ
-    const clamped = Math.min(val, safeMaxTime());
-    target.value = String(clamped);
-
-    // ドラッグ中も映像を更新
-    if (videoElement) {
-      videoElement.currentTime = clamped;
-    }
-
-    // 日時表示を更新
-    const date = hlsTimeToDate(clamped);
-    if (date) {
-      currentDateTime = formatDateTime(date);
+      break;
     }
   }
+  if (!best) best = segments[0];
+  const offset = t - best.hlsStart;
+  return new Date(best.date.getTime() + offset * 1000);
+}
 
-  function onSeekEnd() {
-    if (!videoElement || !seekBar) return;
-    const clamped = Math.min(parseFloat(seekBar.value), safeMaxTime());
+function handleTimeUpdate() {
+  if (!videoElement) return;
+  currentTime = videoElement.currentTime;
+  isPlaying = !videoElement.paused;
+
+  const date = hlsTimeToDate(currentTime);
+  if (date) {
+    currentDateTime = formatDateTime(date);
+  }
+
+  // シークバー操作中でなければ値を同期（DOM直接操作）
+  if (!isSeeking && seekBar) {
+    seekBar.max = String(safeMaxTime());
+    seekBar.value = String(currentTime);
+  }
+}
+
+function handleDurationChange() {
+  if (videoElement) {
+    duration = videoElement.duration || 0;
+  }
+}
+
+function togglePlayPause() {
+  if (!videoElement) return;
+  if (videoElement.paused) {
+    videoElement.play().catch(() => {});
+  } else {
+    videoElement.pause();
+  }
+  isPlaying = !videoElement.paused;
+}
+
+function onSeekStart() {
+  isSeeking = true;
+}
+
+function onSeekInput(e: Event) {
+  const target = e.target as HTMLInputElement;
+  const val = parseFloat(target.value);
+  // ライブエッジを越えないようにクランプ
+  const clamped = Math.min(val, safeMaxTime());
+  target.value = String(clamped);
+
+  // ドラッグ中も映像を更新
+  if (videoElement) {
     videoElement.currentTime = clamped;
-    isSeeking = false;
   }
 
-  /** シークバーの現在位置に対応する撮影日時テキスト */
-  function seekBarDateLabel(t: number): string {
-    const date = hlsTimeToDate(t);
-    return date ? formatDateTime(date) : "";
+  // 日時表示を更新
+  const date = hlsTimeToDate(clamped);
+  if (date) {
+    currentDateTime = formatDateTime(date);
   }
+}
 
-  onMount(() => {
-    const videoSrc = "/api/videos/playlist.m3u8";
+function onSeekEnd() {
+  if (!videoElement || !seekBar) return;
+  const clamped = Math.min(parseFloat(seekBar.value), safeMaxTime());
+  videoElement.currentTime = clamped;
+  isSeeking = false;
+}
 
-    if (Hls.isSupported()) {
-      hls = new Hls({
-        debug: false,
-        enableWorker: true,
-        lowLatencyMode: false,
-        backBufferLength: 90,
-      });
-      hls.loadSource(videoSrc);
-      hls.attachMedia(videoElement);
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        videoElement.play().catch((e: Error) => {
-          console.log("Auto-play prevented: " + e);
-        });
-      });
-      hls.on(Hls.Events.LEVEL_LOADED, (_event: string, data: any) => {
-        const details = data.details;
-        if (!details || !details.fragments) return;
-        // 全フラグメント情報からセグメントマップを再構築
-        const newSegments: SegmentInfo[] = [];
-        for (const frag of details.fragments) {
-          const fragUrl = frag.relurl || frag.url || "";
-          const date = parseSegmentDate(fragUrl);
-          if (date) {
-            newSegments.push({ hlsStart: frag.start ?? 0, date });
-          }
-        }
-        if (newSegments.length > 0) {
-          segments = newSegments;
-        }
-      });
-      hls.on(Hls.Events.ERROR, (_event: string, data: any) => {
-        if (data.fatal) {
-          switch (data.type) {
-            case Hls.ErrorTypes.NETWORK_ERROR:
-              console.log("fatal network error encountered, try to recover");
-              hls?.startLoad();
-              break;
-            case Hls.ErrorTypes.MEDIA_ERROR:
-              console.log("fatal media error encountered, try to recover");
-              hls?.recoverMediaError();
-              break;
-            default:
-              hls?.destroy();
-              break;
-          }
-        }
-      });
-    } else if (videoElement.canPlayType("application/vnd.apple.mpegurl")) {
-      videoElement.src = videoSrc;
-      videoElement.addEventListener("loadedmetadata", () => {
-        videoElement.play();
-      });
-    }
-  });
+/** シークバーの現在位置に対応する撮影日時テキスト */
+function seekBarDateLabel(t: number): string {
+  const date = hlsTimeToDate(t);
+  return date ? formatDateTime(date) : "";
+}
 
-  onDestroy(() => {
-    if (hls) {
-      hls.destroy();
-    }
-  });
+onMount(() => {
+  const videoSrc = "/api/videos/playlist.m3u8";
+
+  if (Hls.isSupported()) {
+    hls = new Hls({
+      debug: false,
+      enableWorker: true,
+      lowLatencyMode: false,
+      backBufferLength: 90,
+    });
+    hls.loadSource(videoSrc);
+    hls.attachMedia(videoElement);
+    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+      videoElement.play().catch((e: Error) => {
+        console.log(`Auto-play prevented: ${e}`);
+      });
+    });
+    // biome-ignore lint/suspicious/noExplicitAny: hls.js types are not exported
+    hls.on(Hls.Events.LEVEL_LOADED, (_event: string, data: any) => {
+      const details = data.details;
+      if (!details || !details.fragments) return;
+      // 全フラグメント情報からセグメントマップを再構築
+      const newSegments: SegmentInfo[] = [];
+      for (const frag of details.fragments) {
+        const fragUrl = frag.relurl || frag.url || "";
+        const date = parseSegmentDate(fragUrl);
+        if (date) {
+          newSegments.push({ hlsStart: frag.start ?? 0, date });
+        }
+      }
+      if (newSegments.length > 0) {
+        segments = newSegments;
+      }
+    });
+    // biome-ignore lint/suspicious/noExplicitAny: hls.js types are not exported
+    hls.on(Hls.Events.ERROR, (_event: string, data: any) => {
+      if (data.fatal) {
+        switch (data.type) {
+          case Hls.ErrorTypes.NETWORK_ERROR:
+            console.log("fatal network error encountered, try to recover");
+            hls?.startLoad();
+            break;
+          case Hls.ErrorTypes.MEDIA_ERROR:
+            console.log("fatal media error encountered, try to recover");
+            hls?.recoverMediaError();
+            break;
+          default:
+            hls?.destroy();
+            break;
+        }
+      }
+    });
+  } else if (videoElement.canPlayType("application/vnd.apple.mpegurl")) {
+    videoElement.src = videoSrc;
+    videoElement.addEventListener("loadedmetadata", () => {
+      videoElement.play();
+    });
+  }
+});
+
+onDestroy(() => {
+  if (hls) {
+    hls.destroy();
+  }
+});
 </script>
 
 <svelte:head>
