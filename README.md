@@ -1,109 +1,141 @@
 # Pi Webcam Streamer
 
-A lightweight, high-performance webcam video streaming API server specifically designed for Raspberry Pi, written in **Rust**. It features video streaming and H.264 recording via V4L2 and FFmpeg.
+A lightweight, high-performance webcam video streaming server specifically designed for Raspberry Pi. It features video streaming, continuous background recording, and a modern web interface for viewing live streams and recordings.
 
 ## Overview
 
-This is a minimalist API server that captures video from a commercial webcam connected to a Raspberry Pi and streams it via HTTP. It also supports continuous segmented background recording.
-
-
+This project provides a complete solution for turning a Raspberry Pi into a network camera. It captures video from a USB webcam, streams it via HTTP (MJPEG), and records continuous H.264 video segments in the background. The included web interface allows you to watch the live stream and browse/play back recorded footage.
 
 ## Features
 
-- Real-time video capture from webcam
-- Motion JPEG (MJPEG) streaming via HTTP
-- H.264 Segmented Recording (MP4) in the background
-- Configurable settings via `config.toml` file
-- **Cross-Platform**: Runs on Linux (Raspberry Pi V4L2) and macOS (AVFoundation) for development.
+- **Real-time Streaming**: Low-latency Motion JPEG (MJPEG) streaming via HTTP.
+- **Background Recording**: Continuous H.264 segmented recording (HLS compatible).
+- **Web Interface**:
+    - Live view player.
+    - Recordings browser with date/time selection.
+    - Responsive design (mobile-friendly).
+- **Efficient**: Low resource usage suitable for single-board computers.
+- **Configurable**: Simple `config.toml` file for camera and server settings.
+- **Service Management**: Built-in commands to install/manage systemd services.
 
-## Tech Stack
+## Usage
 
-- **Rust**: Programming Language
-- **Axum**: Web framework
-- **Tokio**: Async runtime
-- **Nokhwa**: Cross-platform camera capture library
-- **FFmpeg**: Used for efficient H.264 encoding and recording
+### 1. Installation
 
-## API Specification
+Download the latest release for your platform (e.g., Raspberry Pi 4 `aarch64-unknown-linux-gnu`) from the [Releases](https://github.com/macoshita/pi-webcam-streamer/releases) page.
 
-### Endpoints
+Alternatively, you can build from source (see [Build & Development](#build--development) below).
 
-#### `GET /`
+Extract the archive:
+```bash
+tar -xzf pi-webcam-streamer-*.tgz
+cd pi-webcam-streamer
+```
 
-Returns an HTML page with a player to view the webcam stream.
+### 2. Configuration
 
-#### `GET /stream`
-
-Streams the webcam video in MJPEG format (`multipart/x-mixed-replace`).
-
-## Setup
-
-### Prerequisites
-
-- **Rust Toolchain**: Install via [rustup.rs](https://rustup.rs).
-- **FFmpeg**: Required for H.264 recording.
-    - macOS: `brew install ffmpeg`
-    - Raspberry Pi: `sudo apt install ffmpeg`
-
-### Development (macOS)
-
-1. Clone the repository.
-2. Create a `config.toml` file (see Configuration).
-3. Run the server:
-   ```bash
-   cargo run
-   ```
-
-### Deployment (Raspberry Pi)
-
-1. **Cross-compile for Raspberry Pi (ARM64)**:
-   ```bash
-   rustup target add aarch64-unknown-linux-gnu
-   cargo build --release --target aarch64-unknown-linux-gnu
-   ```
-
-2. **Install binary**:
-   Move the binary to `/usr/local/bin` (or any directory in your PATH):
-   ```bash
-   sudo cp ./target/aarch64-unknown-linux-gnu/release/pi-webcam-streamer /usr/local/bin/
-   ```
-
-3. **Configure**:
-   ```bash
-   sudo mkdir -p /etc/pi-webcam-streamer
-   sudo cp config.toml /etc/pi-webcam-streamer/
-   ```
-
-4. **Service Management (systemd)**:
-   Register and manage the service easily using the built-in commands:
-   ```bash
-   # Install service (requires sudo)
-   sudo pi-webcam-streamer service install
-   
-   # Start/Status
-   sudo systemctl status pi-webcam-streamer
-   
-   # Uninstall service (requires sudo)
-   sudo pi-webcam-streamer service uninstall
-   ```
-   The `service install` command automatically creates a systemd unit file at `/etc/systemd/system/pi-webcam-streamer.service` and enables the service.
-
-## Configuration (config.toml)
-
-Create a `config.toml` file in the project directory to customize settings.
+Create a `config.toml` file in the same directory as the binary, or in `/etc/pi-webcam-streamer/config.toml`.
 
 ```toml
 # Camera Settings
 camera_index = 0          # e.g., /dev/video0 or 0
-camera_width = 320        # Default: 320
-camera_height = 240       # Default: 240
-camera_fps = 5            # Default: 5
+camera_width = 640        # Resolution width
+camera_height = 480       # Resolution height
+camera_fps = 30           # Frame rate
 
 # Server Settings
-port = 8080               # Default: 8080
+port = 8080               # Web server port
 
 # Recording Settings (Optional)
 # If recording_path is set, background recording is enabled.
 recording_path = "./recordings"
 recording_segment_minutes = 10
 ```
+
+### 3. Running the Server
+
+**Manual Run:**
+```bash
+./pi-webcam-streamer
+```
+
+**Running as a Service (systemd):**
+The application includes built-in commands to manage the systemd service.
+
+```bash
+# Install service (requires sudo)
+# This creates /etc/systemd/system/pi-webcam-streamer.service
+sudo ./pi-webcam-streamer service install
+
+# Start the service
+sudo systemctl start pi-webcam-streamer
+
+# Check status
+sudo systemctl status pi-webcam-streamer
+
+# Stop the service
+sudo systemctl stop pi-webcam-streamer
+
+# Uninstall service
+sudo ./pi-webcam-streamer service uninstall
+```
+
+### 4. Web Interface
+
+Open your browser and navigate to:
+`http://<your-pi-ip>:8080`
+
+- **Live View**: Watch the real-time camera feed.
+- **Recordings**: Browse and play back recorded video segments.
+
+## API Endpoints
+
+- `GET /`: Serves the Web UI.
+- `GET /api/stream`: MJPEG stream (`multipart/x-mixed-replace`).
+- `GET /api/videos/*`: Serves recorded video files (if recording is enabled).
+
+---
+
+## Build & Development
+
+For developers who want to modify the code or build from source.
+
+### Architecture
+- **Backend**: Rust (Axum, Tokio, Nokhwa)
+- **Frontend**: SvelteKit, TypeScript, Tailwind CSS, DaisyUI
+- **Media**: FFmpeg (encoding), HLS.js (playback)
+
+### Prerequisites
+
+- **Rust Toolchain**: Install via [rustup.rs](https://rustup.rs).
+- **Bun**: Required to build the frontend.
+- **FFmpeg**: Required at runtime for H.264 recording.
+    - macOS: `brew install ffmpeg`
+    - Raspberry Pi: `sudo apt install ffmpeg`
+
+### 1. Build Frontend
+The backend serves the frontend static files from `frontend/build`. You must build the frontend first.
+```bash
+cd frontend
+bun install
+bun run build
+cd ..
+```
+
+### 2. Build Backend
+
+**Development (macOS/Linux):**
+```bash
+cargo run
+```
+
+**Cross-compile for Raspberry Pi (aarch64):**
+```bash
+rustup target add aarch64-unknown-linux-gnu
+cargo build --release --target aarch64-unknown-linux-gnu
+```
+
+### Project Structure
+- `src/`: Rust backend source code.
+- `frontend/`: SvelteKit frontend source code.
+- `frontend/build/`: Static files generated by SvelteKit (served by backend).
