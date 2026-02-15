@@ -196,7 +196,7 @@
 </svelte:head>
 
 <div class="card bg-base-100 shadow-xl overflow-hidden">
-  <div class="relative bg-black">
+  <figure class="relative bg-black">
     <!-- svelte-ignore a11y_media_has_caption -->
     <video
       bind:this={videoElement}
@@ -215,7 +215,7 @@
         </div>
       </div>
     {/if}
-  </div>
+  </figure>
 
   <div class="p-4 bg-base-200 flex items-center gap-4">
     <button class="btn btn-circle btn-primary" on:click={togglePlayPause}>

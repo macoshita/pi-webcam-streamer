@@ -43,12 +43,7 @@
 	<div class="flex-1">
 		<ul class="menu menu-horizontal px-1">
 			<li>
-				<a
-					href="/"
-					class={page.url.pathname === "/"
-						? "bg-neutral text-neutral-content"
-						: ""}
-				>
+				<a href="/" class={page.url.pathname === "/" ? "active" : ""}>
 					<Video size="20" />
 					{settings.t.live}
 				</a>
@@ -56,9 +51,7 @@
 			<li>
 				<a
 					href="/recordings"
-					class={page.url.pathname === "/recordings"
-						? "bg-neutral text-neutral-content"
-						: ""}
+					class={page.url.pathname === "/recordings" ? "active" : ""}
 				>
 					<Film size="20" />
 					{settings.t.recordings}
@@ -67,76 +60,73 @@
 		</ul>
 	</div>
 	<div class="flex-none">
-		<ul class="menu menu-horizontal px-1">
-			<li>
-				<details>
-					<summary>
-						<SettingsIcon size="20" />
-					</summary>
-					<ul
-						class="bg-base-100 rounded-t-none p-2 z-[1] shadow-sm min-w-40 right-0"
+		<div class="dropdown dropdown-end">
+			<div tabindex="0" role="button" class="btn btn-ghost btn-circle">
+				<SettingsIcon size="20" />
+			</div>
+			<ul
+				tabindex="-1"
+				class="dropdown-content menu bg-base-100 rounded-box z-[1] w-52 p-2 shadow"
+			>
+				<li class="menu-title">{settings.t.language}</li>
+				<li>
+					<button
+						class={settings.language === "en" ? "active" : ""}
+						onclick={() => (settings.language = "en")}
 					>
-						<li class="menu-title">{settings.t.language}</li>
-						<li>
-							<button
-								class={settings.language === "en" ? "active" : ""}
-								onclick={() => (settings.language = "en")}
-							>
-								{#if settings.language === "en"}
-									<Check size="16" />
-								{/if}
-								{settings.t.english}
-							</button>
-						</li>
-						<li>
-							<button
-								class={settings.language === "ja" ? "active" : ""}
-								onclick={() => (settings.language = "ja")}
-							>
-								{#if settings.language === "ja"}
-									<Check size="16" />
-								{/if}
-								{settings.t.japanese}
-							</button>
-						</li>
-						<li class="menu-title mt-2">{settings.t.theme}</li>
-						<li>
-							<button
-								class={settings.theme === "light" ? "active" : ""}
-								onclick={() => (settings.theme = "light")}
-							>
-								{#if settings.theme === "light"}
-									<Check size="16" />
-								{/if}
-								{settings.t.light}
-							</button>
-						</li>
-						<li>
-							<button
-								class={settings.theme === "dark" ? "active" : ""}
-								onclick={() => (settings.theme = "dark")}
-							>
-								{#if settings.theme === "dark"}
-									<Check size="16" />
-								{/if}
-								{settings.t.dark}
-							</button>
-						</li>
-						<li>
-							<button
-								class={settings.theme === "system" ? "active" : ""}
-								onclick={() => (settings.theme = "system")}
-							>
-								{#if settings.theme === "system"}
-									<Check size="16" />
-								{/if}
-								{settings.t.system}
-							</button>
-						</li>
-					</ul>
-				</details>
-			</li>
-		</ul>
+						{#if settings.language === "en"}
+							<Check size="16" />
+						{/if}
+						{settings.t.english}
+					</button>
+				</li>
+				<li>
+					<button
+						class={settings.language === "ja" ? "active" : ""}
+						onclick={() => (settings.language = "ja")}
+					>
+						{#if settings.language === "ja"}
+							<Check size="16" />
+						{/if}
+						{settings.t.japanese}
+					</button>
+				</li>
+				<li class="menu-title mt-2">{settings.t.theme}</li>
+				<li>
+					<button
+						class={settings.theme === "light" ? "active" : ""}
+						onclick={() => (settings.theme = "light")}
+					>
+						{#if settings.theme === "light"}
+							<Check size="16" />
+						{/if}
+						{settings.t.light}
+					</button>
+				</li>
+				<li>
+					<button
+						class={settings.theme === "dark" ? "active" : ""}
+						onclick={() => (settings.theme = "dark")}
+					>
+						{#if settings.theme === "dark"}
+							<Check size="16" />
+						{/if}
+						{settings.t.dark}
+					</button>
+				</li>
+				<li>
+					<button
+						class={settings.theme === "system" ? "active" : ""}
+						onclick={() => (settings.theme = "system")}
+					>
+						{#if settings.theme === "system"}
+							<Check size="16" />
+						{/if}
+						{settings.t.system}
+					</button>
+				</li>
+			</ul>
+		</div>
 	</div>
 </div>
 
