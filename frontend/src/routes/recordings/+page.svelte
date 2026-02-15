@@ -1,6 +1,6 @@
 <script lang="ts">
 import Hls from "hls.js";
-import { Pause, Play } from "lucide-svelte";
+import { ChevronsLeft, ChevronsRight, Pause, Play } from "lucide-svelte";
 import { onDestroy, onMount } from "svelte";
 
 import { settings } from "$lib/stores/settings.svelte";
@@ -88,6 +88,21 @@ function togglePlayPause() {
     videoElement.pause();
   }
   isPlaying = !videoElement.paused;
+}
+
+function skip(seconds: number) {
+  if (!videoElement) return;
+  const targetTime = videoElement.currentTime + seconds;
+  const clamped = Math.max(0, Math.min(targetTime, safeMaxTime()));
+  videoElement.currentTime = clamped;
+}
+
+function handleKeydown(event: KeyboardEvent) {
+  if (event.key === "ArrowLeft") {
+    skip(-300);
+  } else if (event.key === "ArrowRight") {
+    skip(300);
+  }
 }
 
 function onSeekStart() {
@@ -193,6 +208,8 @@ onDestroy(() => {
 });
 </script>
 
+<svelte:window on:keydown={handleKeydown} />
+
 <svelte:head>
   <title>{settings.t.recordings}</title>
 </svelte:head>
@@ -219,16 +236,26 @@ onDestroy(() => {
     {/if}
   </figure>
 
-  <div class="p-4 bg-base-200 flex items-center gap-4">
-    <button class="btn btn-circle btn-primary" on:click={togglePlayPause}>
-      {#if isPlaying}
-        <Pause class="h-6 w-6" />
-      {:else}
-        <Play class="h-6 w-6" />
-      {/if}
-    </button>
+  <div class="p-4 bg-base-200 flex flex-col sm:flex-row items-center gap-4">
+    <div
+      class="flex items-center gap-2 justify-center w-full sm:w-auto order-2 sm:order-1"
+    >
+      <button class="btn btn-circle btn-ghost" on:click={() => skip(-300)}>
+        <ChevronsLeft class="h-6 w-6" />
+      </button>
+      <button class="btn btn-circle btn-primary" on:click={togglePlayPause}>
+        {#if isPlaying}
+          <Pause class="h-6 w-6" />
+        {:else}
+          <Play class="h-6 w-6" />
+        {/if}
+      </button>
+      <button class="btn btn-circle btn-ghost" on:click={() => skip(300)}>
+        <ChevronsRight class="h-6 w-6" />
+      </button>
+    </div>
 
-    <div class="flex-1">
+    <div class="flex-1 w-full order-1 sm:order-2">
       <input
         bind:this={seekBar}
         type="range"
