@@ -45,9 +45,6 @@ jobs:
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-latest
             archive_name: pi-webcam-streamer-linux-arm64
-          - target: armv7-unknown-linux-gnueabihf
-            os: ubuntu-latest
-            archive_name: pi-webcam-streamer-linux-armv7
 
     steps:
       - uses: actions/checkout@v4
