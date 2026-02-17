@@ -141,7 +141,21 @@ function seekBarDateLabel(t: number): string {
   return date ? formatDateTime(date) : "";
 }
 
-onMount(() => {
+let recordingEnabled = true;
+
+onMount(async () => {
+  try {
+    const res = await fetch("/api/status");
+    if (res.ok) {
+      const data = await res.json();
+      recordingEnabled = data.recording_enabled;
+    }
+  } catch (e) {
+    console.error("Failed to fetch status:", e);
+  }
+
+  if (!recordingEnabled) return;
+
   const videoSrc = "/api/videos/playlist.m3u8";
 
   if (Hls.isSupported()) {
@@ -214,61 +228,69 @@ onDestroy(() => {
   <title>{settings.t.recordings}</title>
 </svelte:head>
 
-<div class="card bg-base-100 shadow-xl overflow-hidden">
-  <figure class="relative bg-black">
-    <!-- svelte-ignore a11y_media_has_caption -->
-    <video
-      bind:this={videoElement}
-      autoplay
-      on:timeupdate={handleTimeUpdate}
-      on:durationchange={handleDurationChange}
-      on:play={() => (isPlaying = true)}
-      on:pause={() => (isPlaying = false)}
-      class="w-full h-auto max-h-[70vh] object-contain mx-auto"
-    ></video>
+{#if !recordingEnabled}
+  <div class="card bg-base-100 shadow-xl p-8 text-center">
+    <p class="text-xl text-base-content/70">
+      {settings.t.recordingNotEnabled}
+    </p>
+  </div>
+{:else}
+  <div class="card bg-base-100 shadow-xl overflow-hidden">
+    <figure class="relative bg-black">
+      <!-- svelte-ignore a11y_media_has_caption -->
+      <video
+        bind:this={videoElement}
+        autoplay
+        on:timeupdate={handleTimeUpdate}
+        on:durationchange={handleDurationChange}
+        on:play={() => (isPlaying = true)}
+        on:pause={() => (isPlaying = false)}
+        class="w-full h-auto max-h-[70vh] object-contain mx-auto"
+      ></video>
 
-    {#if currentDateTime}
-      <div class="absolute top-2 left-2">
-        <div class="badge badge-neutral gap-2 font-mono opacity-80">
-          {currentDateTime}
+      {#if currentDateTime}
+        <div class="absolute top-2 left-2">
+          <div class="badge badge-neutral gap-2 font-mono opacity-80">
+            {currentDateTime}
+          </div>
         </div>
+      {/if}
+    </figure>
+
+    <div class="p-4 bg-base-200 flex flex-col sm:flex-row items-center gap-4">
+      <div
+        class="flex items-center gap-2 justify-center w-full sm:w-auto order-2 sm:order-1"
+      >
+        <button class="btn btn-circle btn-ghost" on:click={() => skip(-300)}>
+          <ChevronsLeft class="h-6 w-6" />
+        </button>
+        <button class="btn btn-circle btn-primary" on:click={togglePlayPause}>
+          {#if isPlaying}
+            <Pause class="h-6 w-6" />
+          {:else}
+            <Play class="h-6 w-6" />
+          {/if}
+        </button>
+        <button class="btn btn-circle btn-ghost" on:click={() => skip(300)}>
+          <ChevronsRight class="h-6 w-6" />
+        </button>
       </div>
-    {/if}
-  </figure>
 
-  <div class="p-4 bg-base-200 flex flex-col sm:flex-row items-center gap-4">
-    <div
-      class="flex items-center gap-2 justify-center w-full sm:w-auto order-2 sm:order-1"
-    >
-      <button class="btn btn-circle btn-ghost" on:click={() => skip(-300)}>
-        <ChevronsLeft class="h-6 w-6" />
-      </button>
-      <button class="btn btn-circle btn-primary" on:click={togglePlayPause}>
-        {#if isPlaying}
-          <Pause class="h-6 w-6" />
-        {:else}
-          <Play class="h-6 w-6" />
-        {/if}
-      </button>
-      <button class="btn btn-circle btn-ghost" on:click={() => skip(300)}>
-        <ChevronsRight class="h-6 w-6" />
-      </button>
-    </div>
-
-    <div class="flex-1 w-full order-1 sm:order-2">
-      <input
-        bind:this={seekBar}
-        type="range"
-        min="0"
-        max={safeMaxTime()}
-        step="0.1"
-        class="range range-xs range-primary w-full"
-        on:mousedown={onSeekStart}
-        on:touchstart={onSeekStart}
-        on:input={onSeekInput}
-        on:mouseup={onSeekEnd}
-        on:touchend={onSeekEnd}
-      />
+      <div class="flex-1 w-full order-1 sm:order-2">
+        <input
+          bind:this={seekBar}
+          type="range"
+          min="0"
+          max={safeMaxTime()}
+          step="0.1"
+          class="range range-xs range-primary w-full"
+          on:mousedown={onSeekStart}
+          on:touchstart={onSeekStart}
+          on:input={onSeekInput}
+          on:mouseup={onSeekEnd}
+          on:touchend={onSeekEnd}
+        />
+      </div>
     </div>
   </div>
-</div>
+{/if}

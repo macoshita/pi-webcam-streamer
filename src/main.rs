@@ -41,6 +41,7 @@ enum ServiceCommands {
 #[derive(Clone)]
 struct AppState {
     frame_rx: camera::FrameReceiver,
+    recording_enabled: bool,
 }
 
 #[tokio::main]
@@ -98,11 +99,13 @@ async fn run_server() {
 
     let state = AppState {
         frame_rx,
+        recording_enabled: config.recording_path.is_some(),
     };
 
     // Build our application with API routes
     let mut app = Router::new()
-        .route("/api/stream", get(stream_handler));
+        .route("/api/stream", get(stream_handler))
+        .route("/api/status", get(status_handler));
 
     if let Some(path) = config.recording_path {
         app = app.nest_service("/api/videos", ServeDir::new(path));
@@ -119,6 +122,19 @@ async fn run_server() {
     let listener = TcpListener::bind(&addr).await.unwrap();
     println!("Server running on http://{}", addr);
     axum::serve(listener, app).await.unwrap();
+}
+
+#[derive(serde::Serialize)]
+struct ServerStatus {
+    recording_enabled: bool,
+}
+
+async fn status_handler(
+    State(state): State<AppState>,
+) -> axum::Json<ServerStatus> {
+    axum::Json(ServerStatus {
+        recording_enabled: state.recording_enabled,
+    })
 }
 
 async fn stream_handler(

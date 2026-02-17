@@ -15,6 +15,7 @@ const translations = {
     light: "Light",
     dark: "Dark",
     system: "System",
+    recordingNotEnabled: "Recording is not enabled",
   },
   ja: {
     live: "ライブ",
@@ -27,6 +28,7 @@ const translations = {
     light: "ライト",
     dark: "ダーク",
     system: "システム",
+    recordingNotEnabled: "録画は無効化されています",
   },
 };
 
