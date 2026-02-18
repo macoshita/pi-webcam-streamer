@@ -19,6 +19,8 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Generate a default config.toml
+    Init,
     /// Manage systemd service
     Service {
         #[command(subcommand)]
@@ -45,6 +47,51 @@ async fn main() {
     let cli = Cli::parse();
 
     match cli.command {
+        Some(Commands::Init) => {
+            let config_file_path = "config.toml";
+            if std::path::Path::new(config_file_path).exists() {
+                eprintln!("Error: config.toml already exists.");
+                std::process::exit(1);
+            }
+
+            let default_config = config::Config::default();
+            let toml_string = format!(
+                "# Camera Settings\n\
+                camera_index = {}          # e.g., /dev/video0 or 0\n\
+                camera_width = {}           # Output video width\n\
+                camera_height = {}          # Output video height\n\
+                camera_fps = {}           # Frame rate\n\
+                camera_format = \"{}\"\n\
+                \n\
+                # Server Settings\n\
+                port = {}               # Web server port\n\
+                \n\
+                # Recording Settings (Optional)\n\
+                # If recording_path is set, background recording is enabled.\n\
+                # Note: Continuous recording writes a large amount of data. Writing directly to the SD card may cause it to wear out quickly and fail.\n\
+                # We strongly recommend using an external USB drive (HDD/SSD) or a RAM disk for the recording path.\n\
+                # recording_path = \"./recordings\"\n\
+                # recording_segment_seconds = {} # Duration of each video segment in seconds\n\
+                # recording_video_codec = \"libx264\" # Video codec for recording, e.g., libx264, h264_v4l2m2m (for RPi hardware acceleration)\n\
+                # recording_retention = \"{}\" # Retention duration for recordings, e.g. \"12h\", \"1day\", \"7days 12h\"\n",
+                default_config.camera_index,
+                default_config.camera_width,
+                default_config.camera_height,
+                default_config.camera_fps,
+                default_config.camera_format,
+                default_config.port,
+                default_config.recording_segment_seconds,
+                default_config.recording_retention,
+            );
+
+            match std::fs::write(config_file_path, toml_string) {
+                Ok(_) => println!("Successfully created config.toml at {}", config_file_path),
+                Err(e) => {
+                    eprintln!("Error writing config.toml: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
         Some(Commands::Service { command }) => {
             let result = match command {
                 ServiceCommands::Install => service::install_service(),

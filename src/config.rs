@@ -1,7 +1,7 @@
 use config::{Config as ConfigLoader, Environment, File};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Config {
     pub camera_index: u32,
     pub camera_width: u32,
@@ -16,28 +16,29 @@ pub struct Config {
     pub recording_retention: String,
 }
 
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            camera_index: 0,
+            camera_width: 320,
+            camera_height: 240,
+            camera_fps: 5,
+            port: 8080,
+            camera_format: "MJPEG".to_string(),
+            recording_path: None,
+            recording_segment_seconds: 10,
+            recording_video_codec: None,
+            recording_retention: "7days".to_string(),
+        }
+    }
+}
+
 impl Config {
     pub fn load() -> Self {
+        let default_config = Config::default();
         let builder = ConfigLoader::builder()
-            // 1. Default values
-            .set_default("camera_index", 0)
-            .unwrap()
-            .set_default("camera_width", 320)
-            .unwrap()
-            .set_default("camera_height", 240)
-            .unwrap()
-            .set_default("camera_fps", 5)
-            .unwrap()
-            .set_default("port", 8080)
-            .unwrap()
-            .set_default("camera_format", "MJPEG")
-            .unwrap()
-            // recording_path is Option, so no default means None
-            .set_default("recording_segment_seconds", 10)
-            .unwrap()
-            // recording_video_codec is Option, so no default means None
-            .set_default("recording_retention", "7days")
-            .unwrap()
+            // 1. Default values from Default trait
+            .add_source(config::Config::try_from(&default_config).unwrap())
             // 2. System-wide config file
             .add_source(File::with_name("/etc/pi-webcam-streamer/config.toml").required(false))
             // 3. Local config file
