@@ -28,7 +28,7 @@ impl Default for Config {
             recording_path: None,
             recording_segment_seconds: 10,
             recording_video_codec: None,
-            recording_retention: "7days".to_string(),
+            recording_retention: "12h".to_string(),
         }
     }
 }
