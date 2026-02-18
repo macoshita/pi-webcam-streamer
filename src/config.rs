@@ -1,6 +1,5 @@
+use config::{Config as ConfigLoader, Environment, File};
 use serde::Deserialize;
-use config::{Config as ConfigLoader, File, Environment};
-
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
@@ -21,28 +20,33 @@ impl Config {
     pub fn load() -> Self {
         let builder = ConfigLoader::builder()
             // 1. Default values
-            .set_default("camera_index", 0).unwrap()
-            .set_default("camera_width", 320).unwrap()
-            .set_default("camera_height", 240).unwrap()
-            .set_default("camera_fps", 5).unwrap()
-            .set_default("port", 8080).unwrap()
-            .set_default("camera_format", "MJPEG").unwrap()
+            .set_default("camera_index", 0)
+            .unwrap()
+            .set_default("camera_width", 320)
+            .unwrap()
+            .set_default("camera_height", 240)
+            .unwrap()
+            .set_default("camera_fps", 5)
+            .unwrap()
+            .set_default("port", 8080)
+            .unwrap()
+            .set_default("camera_format", "MJPEG")
+            .unwrap()
             // recording_path is Option, so no default means None
-            .set_default("recording_segment_seconds", 10).unwrap()
+            .set_default("recording_segment_seconds", 10)
+            .unwrap()
             // recording_video_codec is Option, so no default means None
-            .set_default("recording_retention", "7days").unwrap()
-            
+            .set_default("recording_retention", "7days")
+            .unwrap()
             // 2. System-wide config file
             .add_source(File::with_name("/etc/pi-webcam-streamer/config.toml").required(false))
-            
             // 3. Local config file
             .add_source(File::with_name("config.toml").required(false))
-            
             // 4. Environment variables
             .add_source(Environment::default().try_parsing(true).separator("_"));
 
         let config = builder.build().unwrap();
-        
+
         match config.try_deserialize() {
             Ok(c) => c,
             Err(e) => {
@@ -53,8 +57,12 @@ impl Config {
 
     /// Parse recording_retention string into seconds using humantime.
     pub fn retention_seconds(&self) -> u64 {
-        let duration = humantime::parse_duration(&self.recording_retention)
-            .unwrap_or_else(|e| panic!("Invalid recording_retention '{}': {}", self.recording_retention, e));
+        let duration = humantime::parse_duration(&self.recording_retention).unwrap_or_else(|e| {
+            panic!(
+                "Invalid recording_retention '{}': {}",
+                self.recording_retention, e
+            )
+        });
         duration.as_secs()
     }
 
@@ -85,5 +93,4 @@ mod tests {
         // 86400 / 10 = 8640
         assert_eq!(config.hls_list_size(), 8640);
     }
-
 }

@@ -1,8 +1,8 @@
+use anyhow::{Context, Result};
 use std::env;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
-use anyhow::{Context, Result};
 
 const SERVICE_NAME: &str = "pi-webcam-streamer";
 const SERVICE_FILE_PATH: &str = "/etc/systemd/system/pi-webcam-streamer.service";
@@ -36,7 +36,11 @@ RestartSec=5
 [Install]
 WantedBy=multi-user.target
 "#,
-        current_exe.parent().unwrap_or(Path::new("/")).to_str().unwrap_or("/"),
+        current_exe
+            .parent()
+            .unwrap_or(Path::new("/"))
+            .to_str()
+            .unwrap_or("/"),
         exe_path_str
     );
 

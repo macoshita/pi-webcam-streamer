@@ -1,15 +1,21 @@
 use anyhow::Result;
 use nokhwa::{
+    Camera,
     pixel_format::RgbFormat,
     utils::{CameraIndex, RequestedFormat, RequestedFormatType},
-    Camera,
 };
 use std::{sync::Arc, thread, time::Duration};
 use tokio::sync::watch;
 
 pub type FrameReceiver = watch::Receiver<Option<Arc<Vec<u8>>>>;
 
-pub fn start_camera_capture(index: u32, width: u32, height: u32, fps: u32, request_format: &str) -> Result<(FrameReceiver, u32)> {
+pub fn start_camera_capture(
+    index: u32,
+    width: u32,
+    height: u32,
+    fps: u32,
+    request_format: &str,
+) -> Result<(FrameReceiver, u32)> {
     let camera = initialize_camera(index, width, height, fps, request_format)?;
     let actual_fps = camera.camera_format().frame_rate();
     let (tx, rx) = watch::channel(None);
@@ -31,7 +37,7 @@ fn initialize_camera(
     request_format: &str,
 ) -> Result<Camera> {
     let index = CameraIndex::Index(index);
-    
+
     let frame_format = match request_format {
         "MJPEG" => nokhwa::utils::FrameFormat::MJPEG,
         "YUYV" => nokhwa::utils::FrameFormat::YUYV,
@@ -59,12 +65,7 @@ fn initialize_camera(
     Ok(camera)
 }
 
-fn run_capture_loop(
-    tx: watch::Sender<Option<Arc<Vec<u8>>>>,
-    mut camera: Camera,
-) -> Result<()> {
-
-
+fn run_capture_loop(tx: watch::Sender<Option<Arc<Vec<u8>>>>, mut camera: Camera) -> Result<()> {
     println!("Camera started: {:?}", camera.camera_format());
     let use_mjpeg = camera.camera_format().format() == nokhwa::utils::FrameFormat::MJPEG;
 
@@ -88,9 +89,10 @@ fn run_capture_loop(
                         }
                     };
                     let mut cursor = std::io::Cursor::new(&mut jpeg_data);
-                    let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut cursor, 80);
+                    let mut encoder =
+                        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut cursor, 80);
                     match encoder.encode_image(&img) {
-                        Ok(_) => {},
+                        Ok(_) => {}
                         Err(e) => {
                             eprintln!("Failed to encode JPEG: {}", e);
                             continue;
@@ -98,7 +100,7 @@ fn run_capture_loop(
                     }
                     jpeg_data
                 };
-                
+
                 let _ = tx.send(Some(Arc::new(jpeg_data)));
             }
             Err(e) => {

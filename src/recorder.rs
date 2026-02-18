@@ -1,9 +1,9 @@
-use tokio::io::AsyncWriteExt;
-use tokio::process::{Child, Command};
-use tokio::sync::watch;
 use crate::config::Config;
 use std::process::Stdio;
 use std::sync::Arc;
+use tokio::io::AsyncWriteExt;
+use tokio::process::{Child, Command};
+use tokio::sync::watch;
 
 pub struct Recorder {
     config: Config,
@@ -13,7 +13,11 @@ pub struct Recorder {
 
 impl Recorder {
     pub fn new(config: Config, frame_rx: watch::Receiver<Option<Arc<Vec<u8>>>>, fps: u32) -> Self {
-        Self { config, frame_rx, fps }
+        Self {
+            config,
+            frame_rx,
+            fps,
+        }
     }
 
     pub fn start(mut self) {
@@ -51,7 +55,7 @@ impl Recorder {
                     println!("Frame channel closed, stopping recorder");
                     break;
                 }
-                
+
                 let frame = self.frame_rx.borrow_and_update().clone();
                 if let Some(frame_data) = frame {
                     if let Some(child) = process.as_mut() {
@@ -66,7 +70,7 @@ impl Recorder {
                     }
                 }
             }
-            
+
             // Cleanup
             if let Some(mut child) = process {
                 let _ = child.kill().await;
@@ -82,27 +86,36 @@ impl Recorder {
         let hls_list_size = self.config.hls_list_size().to_string();
 
         let mut cmd = Command::new("ffmpeg");
-        
+
         // Log level
         cmd.args(&["-loglevel", "error"]);
 
         // Input
         cmd.args(&[
-            "-use_wallclock_as_timestamps", "1",
-            "-f", "mjpeg",
-            "-i", "pipe:0",
+            "-use_wallclock_as_timestamps",
+            "1",
+            "-f",
+            "mjpeg",
+            "-i",
+            "pipe:0",
         ]);
 
         // Output Format & Codec
         cmd.args(&["-vf", "format=yuv420p"]);
         cmd.args(&["-r", &fps]); // Normalize output framerate
-        
-        let video_codec = self.config.recording_video_codec.as_deref().unwrap_or(
-            if cfg!(target_os = "linux") { "h264_v4l2m2m" } else { "libx264" }
-        );
+
+        let video_codec =
+            self.config
+                .recording_video_codec
+                .as_deref()
+                .unwrap_or(if cfg!(target_os = "linux") {
+                    "h264_v4l2m2m"
+                } else {
+                    "libx264"
+                });
 
         cmd.args(&["-c:v", video_codec]);
-        
+
         // GOP: keyframe every 2 seconds, aligns well with HLS segments
         let gop = (self.config.camera_fps * 2).to_string();
         cmd.args(&["-g", &gop]);
@@ -117,18 +130,25 @@ impl Recorder {
 
         // HLS output with automatic segment cleanup
         cmd.args(&[
-            "-f", "hls",
-            "-hls_time", &segment_time,
-            "-hls_segment_type", "fmp4",
-            "-hls_flags", "independent_segments+append_list+delete_segments",
-            "-hls_segment_filename", &segment_pattern,
-            "-strftime", "1",
-            "-hls_list_size", &hls_list_size,
+            "-f",
+            "hls",
+            "-hls_time",
+            &segment_time,
+            "-hls_segment_type",
+            "fmp4",
+            "-hls_flags",
+            "independent_segments+append_list+delete_segments",
+            "-hls_segment_filename",
+            &segment_pattern,
+            "-strftime",
+            "1",
+            "-hls_list_size",
+            &hls_list_size,
             &playlist_path,
         ]);
 
         cmd.stdin(Stdio::piped());
-        cmd.stderr(Stdio::inherit()); 
+        cmd.stderr(Stdio::inherit());
 
         cmd.spawn()
     }

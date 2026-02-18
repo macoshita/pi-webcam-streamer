@@ -1,8 +1,4 @@
-use axum::{
-    extract::State,
-    routing::get,
-    Router,
-};
+use axum::{Router, extract::State, routing::get};
 use tokio::net::TcpListener;
 use tower_http::services::ServeDir;
 
@@ -86,7 +82,10 @@ async fn run_server() {
         }
     };
 
-    println!("Camera initialized. Configured FPS: {}, Actual FPS: {}", config.camera_fps, actual_fps);
+    println!(
+        "Camera initialized. Configured FPS: {}, Actual FPS: {}",
+        config.camera_fps, actual_fps
+    );
 
     // Start recorder
     if config.recording_path.is_some() {
@@ -128,8 +127,8 @@ async fn run_server() {
 struct Assets;
 
 async fn static_handler(uri: axum::http::Uri) -> impl axum::response::IntoResponse {
-    use axum::response::{IntoResponse, Response};
     use axum::http::{StatusCode, header};
+    use axum::response::{IntoResponse, Response};
 
     let path = uri.path().trim_start_matches('/');
 
@@ -172,17 +171,13 @@ struct ServerStatus {
     recording_enabled: bool,
 }
 
-async fn status_handler(
-    State(state): State<AppState>,
-) -> axum::Json<ServerStatus> {
+async fn status_handler(State(state): State<AppState>) -> axum::Json<ServerStatus> {
     axum::Json(ServerStatus {
         recording_enabled: state.recording_enabled,
     })
 }
 
-async fn stream_handler(
-    State(state): State<AppState>,
-) -> axum::response::Response {
+async fn stream_handler(State(state): State<AppState>) -> axum::response::Response {
     use axum::body::Body;
     use futures::stream::StreamExt;
 
@@ -201,7 +196,6 @@ async fn stream_handler(
         });
 
     let body = Body::from_stream(stream);
-
 
     axum::response::Response::builder()
         .header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
