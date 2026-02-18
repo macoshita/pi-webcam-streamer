@@ -4,7 +4,7 @@ use axum::{
     Router,
 };
 use tokio::net::TcpListener;
-use tower_http::services::{ServeDir, ServeFile};
+use tower_http::services::ServeDir;
 
 use clap::{Parser, Subcommand};
 
@@ -111,9 +111,8 @@ async fn run_server() {
         app = app.nest_service("/api/videos", ServeDir::new(path));
     }
 
-    // Serve SPA frontend from frontend/build
-    let spa_fallback = ServeFile::new("frontend/build/index.html");
-    app = app.fallback_service(ServeDir::new("frontend/build").fallback(spa_fallback));
+    // Serve SPA frontend from embedded assets
+    app = app.fallback(static_handler);
 
     let app = app.with_state(state);
 
@@ -122,6 +121,50 @@ async fn run_server() {
     let listener = TcpListener::bind(&addr).await.unwrap();
     println!("Server running on http://{}", addr);
     axum::serve(listener, app).await.unwrap();
+}
+
+#[derive(rust_embed::RustEmbed)]
+#[folder = "frontend/build/"]
+struct Assets;
+
+async fn static_handler(uri: axum::http::Uri) -> impl axum::response::IntoResponse {
+    use axum::response::{IntoResponse, Response};
+    use axum::http::{StatusCode, header};
+
+    let path = uri.path().trim_start_matches('/');
+
+    let (file, content_type) = if path.is_empty() {
+        (Assets::get("index.html"), "text/html".to_string())
+    } else {
+        match Assets::get(path) {
+            Some(content) => {
+                let mime = mime_guess::from_path(path).first_or_octet_stream();
+                (Some(content), mime.to_string())
+            }
+            None => {
+                // SPA fallback: return index.html if file not found
+                // But only if looking for a file that doesn't look like an API call (which are handled by other routes)
+                // In this case, since this is a fallback handler, API routes are already handled.
+                // However, we should be careful not to return index.html for missing assets (like .js, .css)
+                // Usually SPA router handles paths without extensions.
+                if path.contains('.') {
+                    return (StatusCode::NOT_FOUND, "404 Not Found").into_response();
+                }
+                (Assets::get("index.html"), "text/html".to_string())
+            }
+        }
+    };
+
+    match file {
+        Some(content) => {
+            let body = axum::body::Body::from(content.data);
+            Response::builder()
+                .header(header::CONTENT_TYPE, content_type)
+                .body(body)
+                .unwrap()
+        }
+        None => (StatusCode::NOT_FOUND, "404 Not Found").into_response(),
+    }
 }
 
 #[derive(serde::Serialize)]

@@ -22,19 +22,28 @@ This project provides a complete solution for turning a Raspberry Pi into a netw
 
 ### 1. Installation
 
-Download the latest release for your platform (e.g., Raspberry Pi 4 `aarch64-unknown-linux-gnu`) from the [Releases](https://github.com/macoshita/pi-webcam-streamer/releases) page.
+Download the latest release for your platform from the [Releases](https://github.com/macoshita/pi-webcam-streamer/releases) page.
 
-Alternatively, you can build from source (see [Build & Development](#build--development) below).
+Example for Raspberry Pi (aarch64):
 
-Extract the archive:
 ```bash
-tar -xzf pi-webcam-streamer-*.tgz
+# Download and extract
+curl -L -O https://github.com/macoshita/pi-webcam-streamer/releases/latest/download/pi-webcam-streamer-aarch64-unknown-linux-gnu.tgz
+tar -xzf pi-webcam-streamer-aarch64-unknown-linux-gnu.tar.gz
+
+# Enter the directory
 cd pi-webcam-streamer
+
+# (Recommended) Copy binary to /usr/local/bin
+# You can also run the binary directly from the current directory.
+sudo cp pi-webcam-streamer /usr/local/bin/
 ```
 
 ### 2. Configuration
 
 Create a `config.toml` file in the same directory as the binary, or in `/etc/pi-webcam-streamer/config.toml`.
+
+Basic configuration:
 
 ```toml
 # Camera Settings
@@ -45,18 +54,35 @@ camera_fps = 30           # Frame rate
 
 # Server Settings
 port = 8080               # Web server port
+```
 
-# Recording Settings (Optional)
-# If recording_path is set, background recording is enabled.
-recording_path = "./recordings"
-recording_segment_minutes = 10
+**(Optional) Enable Background Recording**
+
+To enable continuous background recording, add the following lines to your `config.toml`.
+Note: This feature requires `ffmpeg` to be installed.
+
+> [!WARNING]
+> Continuous recording writes a large amount of data. Writing directly to the SD card may cause it to wear out quickly and fail.
+> **We strongly recommend using an external USB drive (HDD/SSD) or a RAM disk for the recording path.**
+
+```bash
+# Install FFmpeg (Raspberry Pi)
+sudo apt install ffmpeg
+```
+
+Add to `config.toml`:
+
+```toml
+# Recording Settings
+recording_path = "/tmp/recordings" # Recommended: Use external drive or RAM disk
+recording_segment_minutes = 10         # Duration of each video segment
 ```
 
 ### 3. Running the Server
 
 **Manual Run:**
 ```bash
-./pi-webcam-streamer
+pi-webcam-streamer
 ```
 
 **Running as a Service (systemd):**
@@ -65,7 +91,7 @@ The application includes built-in commands to manage the systemd service.
 ```bash
 # Install service (requires sudo)
 # This creates /etc/systemd/system/pi-webcam-streamer.service
-sudo ./pi-webcam-streamer service install
+sudo pi-webcam-streamer service install
 
 # Start the service
 sudo systemctl start pi-webcam-streamer
@@ -77,7 +103,7 @@ sudo systemctl status pi-webcam-streamer
 sudo systemctl stop pi-webcam-streamer
 
 # Uninstall service
-sudo ./pi-webcam-streamer service uninstall
+sudo pi-webcam-streamer service uninstall
 ```
 
 ### 4. Web Interface
