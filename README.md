@@ -28,15 +28,11 @@ Example for Raspberry Pi (aarch64):
 
 ```bash
 # Download and extract
-curl -L -O https://github.com/macoshita/pi-webcam-streamer/releases/latest/download/pi-webcam-streamer-aarch64-unknown-linux-gnu.tgz
-tar -xzf pi-webcam-streamer-aarch64-unknown-linux-gnu.tar.gz
+curl -L -O https://github.com/macoshita/pi-webcam-streamer/releases/latest/download/pi-webcam-streamer-linux-arm64.tgz
+tar -xzf pi-webcam-streamer-linux-arm64.tgz
 
-# Enter the directory
-cd pi-webcam-streamer
-
-# (Recommended) Copy binary to /usr/local/bin
-# You can also run the binary directly from the current directory.
-sudo cp pi-webcam-streamer /usr/local/bin/
+# (Recommended) Install binary to /usr/local/bin
+sudo install pi-webcam-streamer /usr/local/bin/
 ```
 
 ### 2. Configuration
@@ -139,8 +135,33 @@ For developers who want to modify the code or build from source.
     - macOS: `brew install ffmpeg`
     - Raspberry Pi: `sudo apt install ffmpeg`
 
-### 1. Build Frontend
-The backend serves the frontend static files from `frontend/build`. You must build the frontend first.
+### Build
+
+The project uses a `Makefile` to simplify the build process.
+
+**Build for Current Platform:**
+```bash
+make
+```
+This will build the frontend first, then the backend.
+
+**Cross-compile for Raspberry Pi (aarch64):**
+Requires [cargo-zigbuild](https://github.com/rust-cross/cargo-zigbuild) and [Zig](https://ziglang.org/).
+```bash
+make cross
+```
+
+### Prerequisites
+- **Rust Toolchain**: Install via [rustup.rs](https://rustup.rs).
+- **Bun**: Required to build the frontend.
+- **FFmpeg**: Required at runtime for H.264 recording.
+- **Zig & cargo-zigbuild**: Required for cross-compilation.
+
+### Manual Build Steps (Internal)
+
+If you prefer to build manually without `make`:
+
+#### 1. Build Frontend
 ```bash
 cd frontend
 bun install
@@ -148,17 +169,21 @@ bun run build
 cd ..
 ```
 
-### 2. Build Backend
-
-**Development (macOS/Linux):**
+#### 2. Build Backend
+**Development:**
 ```bash
 cargo run
 ```
 
-**Cross-compile for Raspberry Pi (aarch64):**
+**Production:**
+```bash
+cargo build --release
+```
+
+**Cross-compile (aarch64):**
 ```bash
 rustup target add aarch64-unknown-linux-gnu
-cargo build --release --target aarch64-unknown-linux-gnu
+cargo zigbuild --release --target aarch64-unknown-linux-gnu
 ```
 
 ### Project Structure
