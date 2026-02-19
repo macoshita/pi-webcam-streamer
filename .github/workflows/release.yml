@@ -76,17 +76,8 @@ jobs:
       - name: Build
         run: cargo zigbuild --target ${{ matrix.target }} --release
 
-      - name: Create Release Package
-        run: |
-          mkdir -p release_pkg/${{ matrix.archive_name }}
-          cp target/${{ matrix.target }}/release/pi-webcam-streamer release_pkg/${{ matrix.archive_name }}/
-          cp config_sample_macbook.toml release_pkg/${{ matrix.archive_name }}/config.toml
-          mkdir -p release_pkg/${{ matrix.archive_name }}/frontend
-          cp -r frontend/build release_pkg/${{ matrix.archive_name }}/frontend/
-
       - name: Archive
-        working-directory: release_pkg
-        run: tar -czf ../${{ matrix.archive_name }}.tgz ${{ matrix.archive_name }}
+        run: tar -czf ${{ matrix.archive_name }}.tgz -C target/${{ matrix.target }}/release pi-webcam-streamer
 
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
