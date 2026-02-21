@@ -11,7 +11,7 @@ mod service;
 
 #[derive(Parser)]
 #[command(name = "pi-webcam-streamer")]
-#[command(about = "A webcam streamer for Raspberry Pi", long_about = None)]
+#[command(version, about = "A webcam streamer for Raspberry Pi", long_about = None)]
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
@@ -26,6 +26,8 @@ enum Commands {
         #[command(subcommand)]
         command: ServiceCommands,
     },
+    /// Print version information
+    Version,
 }
 
 #[derive(Subcommand)]
@@ -101,6 +103,9 @@ async fn main() {
                 eprintln!("Error: {:#}", e);
                 std::process::exit(1);
             }
+        }
+        Some(Commands::Version) => {
+            println!("pi-webcam-streamer {}", env!("CARGO_PKG_VERSION"));
         }
         None => {
             run_server().await;
