@@ -23,10 +23,10 @@ let segments: SegmentInfo[] = [];
 const LIVE_EDGE_MARGIN = 30;
 
 function parseSegmentDate(url: string): Date | null {
-  const match = url.match(/(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})\.mp4/);
+  const match = url.match(/(\d+)\.mp4/);
   if (!match) return null;
-  const [, year, month, day, hour, min, sec] = match;
-  return new Date(+year, +month - 1, +day, +hour, +min, +sec);
+  const timestampSec = parseInt(match[1], 10);
+  return new Date(timestampSec * 1000);
 }
 
 function formatDateTime(date: Date): string {

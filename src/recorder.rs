@@ -84,7 +84,7 @@ impl Recorder {
     fn spawn_ffmpeg(&self, path: &str) -> std::io::Result<Child> {
         let fps = self.fps.to_string();
         let segment_time = self.config.recording_segment_seconds.to_string();
-        let segment_pattern = format!("{}/%Y%m%d_%H%M%S.mp4", path);
+        let segment_pattern = format!("{}/%s.mp4", path);
 
         let mut cmd = Command::new("ffmpeg");
 
@@ -182,7 +182,7 @@ impl PlaylistManager {
         let mut dir = tokio::fs::read_dir(path).await?;
         let mut segments = Vec::new();
 
-        let now = chrono::Utc::now();
+        let now_timestamp = chrono::Utc::now().timestamp();
 
         // 1. Gather all .mp4 files and remove old ones
         while let Some(entry) = dir.next_entry().await? {
@@ -196,32 +196,23 @@ impl PlaylistManager {
                 continue;
             }
 
-            // Parse timestamp from filename (e.g. 20260220_114500.mp4)
-            // Name strictly follows %Y%m%d_%H%M%S.mp4
-            if file_name.len() == 19 {
-                let date_str = &file_name[0..15];
-                if let Ok(naive_dt) =
-                    chrono::NaiveDateTime::parse_from_str(date_str, "%Y%m%d_%H%M%S")
-                {
-                    let dt = chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(
-                        naive_dt,
-                        chrono::Utc,
-                    );
-                    let age_secs = (now - dt).num_seconds();
+            // Parse UNIX timestamp from filename (e.g. 1771655874.mp4)
+            let stem = file_name.trim_end_matches(".mp4");
+            if let Ok(segment_time) = stem.parse::<i64>() {
+                let age_secs = now_timestamp - segment_time;
 
-                    if age_secs > retention_secs as i64 {
-                        // Delete file
-                        let file_path = entry.path();
-                        if let Err(e) = tokio::fs::remove_file(&file_path).await {
-                            eprintln!("Failed to delete old segment {:?}: {}", file_path, e);
-                        } else {
-                            println!("Deleted old segment: {}", file_name);
-                        }
-                        continue;
+                if age_secs > retention_secs as i64 {
+                    // Delete file
+                    let file_path = entry.path();
+                    if let Err(e) = tokio::fs::remove_file(&file_path).await {
+                        eprintln!("Failed to delete old segment {:?}: {}", file_path, e);
+                    } else {
+                        println!("Deleted old segment: {}", file_name);
                     }
-
-                    segments.push(file_name);
+                    continue;
                 }
+
+                segments.push(file_name);
             }
         }
 
@@ -251,9 +242,9 @@ impl PlaylistManager {
         let mut sequence = 0;
         if let Some(first_file) = segments.first() {
             // Derive sequence number roughly from timestamp for continuity
-            let date_str = &first_file[0..15];
-            if let Ok(naive_dt) = chrono::NaiveDateTime::parse_from_str(date_str, "%Y%m%d_%H%M%S") {
-                sequence = naive_dt.and_utc().timestamp() / config.recording_segment_seconds as i64;
+            let stem = first_file.trim_end_matches(".mp4");
+            if let Ok(segment_time) = stem.parse::<i64>() {
+                sequence = segment_time / config.recording_segment_seconds as i64;
             }
         }
 
@@ -277,5 +268,76 @@ impl PlaylistManager {
         tokio::fs::rename(&temp_playlist, &final_playlist).await?;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_manage_playlist_retention() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let path = temp_dir.path().to_str().unwrap();
+
+        // Config setup: 5 hours retention
+        let mut config = Config::default();
+        config.recording_retention = "5h".to_string();
+        config.recording_segment_seconds = 10;
+
+        let now_ts = chrono::Utc::now().timestamp();
+
+        // File 1: 10 hours ago (should be deleted)
+        let time_10h_ago = now_ts - (10 * 3600);
+        let file_10h_ago = format!("{}.mp4", time_10h_ago);
+        tokio::fs::write(temp_dir.path().join(&file_10h_ago), b"dummy")
+            .await
+            .unwrap();
+
+        // File 2: 1 hour ago (should be kept)
+        let time_1h_ago = now_ts - (1 * 3600);
+        let file_1h_ago = format!("{}.mp4", time_1h_ago);
+        tokio::fs::write(temp_dir.path().join(&file_1h_ago), b"dummy")
+            .await
+            .unwrap();
+
+        // Run manage_playlist
+        PlaylistManager::manage_playlist(&config, path)
+            .await
+            .unwrap();
+
+        // Check which files exist
+        let mut dir = tokio::fs::read_dir(path).await.unwrap();
+        let mut files = Vec::new();
+        while let Some(entry) = dir.next_entry().await.unwrap() {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if name.ends_with(".mp4") {
+                files.push(name);
+            }
+        }
+
+        assert!(
+            !files.contains(&file_10h_ago),
+            "Old file {} should be deleted",
+            file_10h_ago
+        );
+        assert!(
+            files.contains(&file_1h_ago),
+            "New file {} should be kept",
+            file_1h_ago
+        );
+
+        // Verify playlist.m3u8 content
+        let playlist_path = temp_dir.path().join("playlist.m3u8");
+        let playlist = tokio::fs::read_to_string(playlist_path).await.unwrap();
+        
+        let expected_sequence = time_1h_ago / config.recording_segment_seconds as i64;
+        let expected_playlist = format!(
+            "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:10\n#EXT-X-MEDIA-SEQUENCE:{}\n#EXT-X-PLAYLIST-TYPE:EVENT\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:10.0000,\n{}\n",
+            expected_sequence,
+            file_1h_ago
+        );
+
+        assert_eq!(playlist, expected_playlist, "The playlist content does not match expected output");
     }
 }
