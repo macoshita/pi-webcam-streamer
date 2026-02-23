@@ -67,39 +67,36 @@ fn initialize_camera(
 
 fn run_capture_loop(tx: watch::Sender<Option<Arc<Vec<u8>>>>, mut camera: Camera) -> Result<()> {
     println!("Camera started: {:?}", camera.camera_format());
-    let use_mjpeg = camera.camera_format().format() == nokhwa::utils::FrameFormat::MJPEG;
 
     loop {
         // Try to get a frame
         match camera.frame() {
             Ok(buffer) => {
-                let jpeg_data = if use_mjpeg {
-                    buffer.buffer().to_vec()
-                } else {
-                    // Buffer is ImageBuffer<Rgb<u8>, Vec<u8>>
-                    // We need to encode this to JPEG for the stream
-                    let mut jpeg_data = Vec::new();
-                    // Use image crate to encode
-                    // Convert nokhwa Buffer to DynamicImage
-                    let img = match buffer.decode_image::<RgbFormat>() {
-                        Ok(img) => image::DynamicImage::ImageRgb8(img),
-                        Err(e) => {
-                            eprintln!("Failed to convert buffer: {}", e);
-                            continue;
-                        }
-                    };
-                    let mut cursor = std::io::Cursor::new(&mut jpeg_data);
-                    let mut encoder =
-                        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut cursor, 80);
-                    match encoder.encode_image(&img) {
-                        Ok(_) => {}
-                        Err(e) => {
-                            eprintln!("Failed to encode JPEG: {}", e);
-                            continue;
-                        }
+                // Buffer is ImageBuffer<Rgb<u8>, Vec<u8>>
+                // We always encode this to JPEG for the stream to ensure
+                // compatibility with iOS Safari, which can be picky about raw MJPEG buffers.
+                let mut jpeg_data = Vec::new();
+
+                let img = match buffer.decode_image::<RgbFormat>() {
+                    Ok(img) => image::DynamicImage::ImageRgb8(img),
+                    Err(e) => {
+                        eprintln!("Failed to convert buffer: {}", e);
+                        continue;
                     }
-                    jpeg_data
                 };
+
+                let mut cursor = std::io::Cursor::new(&mut jpeg_data);
+                // Lower quality slightly for streaming performance
+                let mut encoder =
+                    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut cursor, 80);
+
+                match encoder.encode_image(&img) {
+                    Ok(_) => {}
+                    Err(e) => {
+                        eprintln!("Failed to encode JPEG: {}", e);
+                        continue;
+                    }
+                }
 
                 let _ = tx.send(Some(Arc::new(jpeg_data)));
             }
