@@ -84,7 +84,8 @@ impl Recorder {
     fn spawn_ffmpeg(&self, path: &str) -> std::io::Result<Child> {
         let fps = self.fps.to_string();
         let segment_time = self.config.recording_segment_seconds.to_string();
-        let segment_pattern = format!("{}/%s.mp4", path);
+        let segment_pattern = format!("{}/segment_%09d.mp4", path);
+        let hls_list_size = self.config.hls_list_size().to_string();
 
         let mut cmd = Command::new("ffmpeg");
 
@@ -129,8 +130,8 @@ impl Recorder {
             cmd.args(&["-preset", "ultrafast"]);
         }
 
-        // Use HLS muxer for fmp4 generation as it properly handles init.mp4 even on non-seekable streams
-        let dummy_playlist = format!("{}/ffmpeg_hls.m3u8", path);
+        // HLS output: FFmpeg manages playlist and deletes old segments natively.
+        let playlist_path = format!("{}/playlist.m3u8", path);
         cmd.args(&[
             "-f",
             "hls",
@@ -138,14 +139,13 @@ impl Recorder {
             &segment_time,
             "-hls_segment_type",
             "fmp4",
-            // Remove delete_segments, let Rust handle it!
             "-hls_flags",
-            "independent_segments",
+            "independent_segments+append_list+delete_segments+program_date_time",
             "-hls_segment_filename",
             &segment_pattern,
-            "-strftime",
-            "1",
-            &dummy_playlist,
+            "-hls_list_size",
+            &hls_list_size,
+            &playlist_path,
         ]);
 
         cmd.stdin(Stdio::piped());
