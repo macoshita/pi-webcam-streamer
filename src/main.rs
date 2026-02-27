@@ -42,6 +42,7 @@ enum ServiceCommands {
 struct AppState {
     frame_rx: camera::FrameReceiver,
     recording_enabled: bool,
+    recording_path: Option<String>,
 }
 
 #[tokio::main]
@@ -151,6 +152,7 @@ async fn run_server() {
     let state = AppState {
         frame_rx,
         recording_enabled: config.recording_path.is_some(),
+        recording_path: config.recording_path.clone(),
     };
 
     // Build our application with API routes
@@ -158,8 +160,12 @@ async fn run_server() {
         .route("/api/stream", get(stream_handler))
         .route("/api/status", get(status_handler));
 
-    if let Some(path) = config.recording_path {
-        app = app.nest_service("/api/videos", ServeDir::new(path));
+    if let Some(ref path) = config.recording_path {
+        // playlist.m3u8 is served through a dedicated handler to set Cache-Control: no-cache
+        // Other video files are served directly by ServeDir
+        app = app
+            .route("/api/videos/playlist.m3u8", get(playlist_handler))
+            .nest_service("/api/videos", ServeDir::new(path));
     }
 
     // Serve SPA frontend from embedded assets
@@ -253,4 +259,23 @@ async fn stream_handler(State(state): State<AppState>) -> axum::response::Respon
         .header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
         .body(body)
         .unwrap()
+}
+
+async fn playlist_handler(State(state): State<AppState>) -> axum::response::Response {
+    use axum::http::StatusCode;
+    use axum::response::IntoResponse;
+
+    let Some(ref path) = state.recording_path else {
+        return (StatusCode::NOT_FOUND, "Recording not enabled").into_response();
+    };
+
+    let playlist_path = format!("{}/playlist.m3u8", path);
+    match tokio::fs::read(&playlist_path).await {
+        Ok(content) => axum::response::Response::builder()
+            .header("Content-Type", "application/vnd.apple.mpegurl")
+            .header("Cache-Control", "no-cache, no-store, must-revalidate")
+            .body(axum::body::Body::from(content))
+            .unwrap(),
+        Err(_) => (StatusCode::NOT_FOUND, "playlist.m3u8 not found").into_response(),
+    }
 }

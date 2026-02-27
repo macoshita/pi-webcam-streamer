@@ -22,13 +22,6 @@ let segments: SegmentInfo[] = [];
 // ライブエッジからのマージン（秒）。この分だけシーク可能範囲を縮める
 const LIVE_EDGE_MARGIN = 30;
 
-function parseSegmentDate(url: string): Date | null {
-  const match = url.match(/(\d+)\.mp4/);
-  if (!match) return null;
-  const timestampSec = parseInt(match[1], 10);
-  return new Date(timestampSec * 1000);
-}
-
 function formatDateTime(date: Date): string {
   const pad = (n: number) => n.toString().padStart(2, "0");
   return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
@@ -177,11 +170,13 @@ onMount(async () => {
       const details = data.details;
       if (!details || !details.fragments) return;
       // 全フラグメント情報からセグメントマップを再構築
+      // FFmpeg の program_date_time フラグで埋め込まれた絶対時刻を利用する
       const newSegments: SegmentInfo[] = [];
       for (const frag of details.fragments) {
-        const fragUrl = frag.relurl || frag.url || "";
-        const date = parseSegmentDate(fragUrl);
-        if (date) {
+        const date: Date | undefined = frag.programDateTime
+          ? new Date(frag.programDateTime)
+          : undefined;
+        if (date && !Number.isNaN(date.getTime())) {
           newSegments.push({ hlsStart: frag.start ?? 0, date });
         }
       }

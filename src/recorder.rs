@@ -32,9 +32,6 @@ impl Recorder {
                 return;
             }
 
-            // Start PlaylistManager in background
-            PlaylistManager::start(self.config.clone(), recording_path.clone());
-
             let mut process: Option<Child> = None;
 
             loop {
@@ -84,7 +81,8 @@ impl Recorder {
     fn spawn_ffmpeg(&self, path: &str) -> std::io::Result<Child> {
         let fps = self.fps.to_string();
         let segment_time = self.config.recording_segment_seconds.to_string();
-        let segment_pattern = format!("{}/%s.mp4", path);
+        let segment_pattern = format!("{}/segment_%09d.mp4", path);
+        let hls_list_size = self.config.hls_list_size().to_string();
 
         let mut cmd = Command::new("ffmpeg");
 
@@ -129,8 +127,8 @@ impl Recorder {
             cmd.args(&["-preset", "ultrafast"]);
         }
 
-        // Use HLS muxer for fmp4 generation as it properly handles init.mp4 even on non-seekable streams
-        let dummy_playlist = format!("{}/ffmpeg_hls.m3u8", path);
+        // HLS output: FFmpeg manages playlist and deletes old segments natively.
+        let playlist_path = format!("{}/playlist.m3u8", path);
         cmd.args(&[
             "-f",
             "hls",
@@ -138,206 +136,18 @@ impl Recorder {
             &segment_time,
             "-hls_segment_type",
             "fmp4",
-            // Remove delete_segments, let Rust handle it!
             "-hls_flags",
-            "independent_segments",
+            "independent_segments+append_list+delete_segments+program_date_time",
             "-hls_segment_filename",
             &segment_pattern,
-            "-strftime",
-            "1",
-            &dummy_playlist,
+            "-hls_list_size",
+            &hls_list_size,
+            &playlist_path,
         ]);
 
         cmd.stdin(Stdio::piped());
         cmd.stderr(Stdio::inherit());
 
         cmd.spawn()
-    }
-}
-
-struct PlaylistManager;
-
-impl PlaylistManager {
-    fn start(config: Config, recording_path: String) {
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(
-                config.recording_segment_seconds / 2, // run twice per segment at least
-            ));
-
-            loop {
-                interval.tick().await;
-
-                if let Err(e) = Self::manage_playlist(&config, &recording_path).await {
-                    eprintln!("Failed to manage playlist: {}", e);
-                }
-            }
-        });
-    }
-
-    async fn manage_playlist(config: &Config, path: &str) -> std::io::Result<()> {
-        let retention_secs = config.retention_seconds();
-        let list_size = config.hls_list_size() as usize;
-        let segment_duration = config.recording_segment_seconds as f64;
-
-        let mut dir = tokio::fs::read_dir(path).await?;
-        let mut segments = Vec::new();
-
-        let now_timestamp = chrono::Utc::now().timestamp();
-
-        // 1. Gather all .mp4 files and remove old ones
-        while let Some(entry) = dir.next_entry().await? {
-            let file_type = entry.file_type().await?;
-            if !file_type.is_file() {
-                continue;
-            }
-
-            let file_name = entry.file_name().to_string_lossy().into_owned();
-            if !file_name.ends_with(".mp4") || file_name == "init.mp4" {
-                continue;
-            }
-
-            // Parse UNIX timestamp from filename (e.g. 1771655874.mp4)
-            let stem = file_name.trim_end_matches(".mp4");
-            if let Ok(segment_time) = stem.parse::<i64>() {
-                let age_secs = now_timestamp - segment_time;
-
-                if age_secs > retention_secs as i64 {
-                    // Delete file
-                    let file_path = entry.path();
-                    if let Err(e) = tokio::fs::remove_file(&file_path).await {
-                        eprintln!("Failed to delete old segment {:?}: {}", file_path, e);
-                    } else {
-                        println!("Deleted old segment: {}", file_name);
-                    }
-                    continue;
-                }
-
-                segments.push(file_name);
-            }
-        }
-
-        // 2. Map and generate playlist
-        // Sort segments chronologically
-        segments.sort();
-
-        // Keep at most list_size segments in the playlist
-        if segments.len() > list_size {
-            let start = segments.len() - list_size;
-            segments = segments.split_off(start);
-        }
-
-        // Ignore empty lists if no segments are recorded yet
-        if segments.is_empty() {
-            return Ok(());
-        }
-
-        let mut playlist_content = String::new();
-        playlist_content.push_str("#EXTM3U\n");
-        playlist_content.push_str("#EXT-X-VERSION:7\n");
-        playlist_content.push_str(&format!(
-            "#EXT-X-TARGETDURATION:{}\n",
-            config.recording_segment_seconds
-        ));
-
-        let mut sequence = 0;
-        if let Some(first_file) = segments.first() {
-            // Derive sequence number roughly from timestamp for continuity
-            let stem = first_file.trim_end_matches(".mp4");
-            if let Ok(segment_time) = stem.parse::<i64>() {
-                sequence = segment_time / config.recording_segment_seconds as i64;
-            }
-        }
-
-        playlist_content.push_str(&format!("#EXT-X-MEDIA-SEQUENCE:{}\n", sequence));
-        playlist_content.push_str("#EXT-X-PLAYLIST-TYPE:EVENT\n");
-
-        // We write init.mp4 only if we are creating fmp4
-        playlist_content.push_str("#EXT-X-MAP:URI=\"init.mp4\"\n");
-
-        for segment in segments {
-            // Currently hardcoding duration based on configuration instead of parsing files
-            playlist_content.push_str(&format!("#EXTINF:{:.4},\n", segment_duration));
-            playlist_content.push_str(&format!("{}\n", segment));
-        }
-
-        // 3. Write to temporary file and rename to avoid partial reads
-        let temp_playlist = format!("{}/playlist.m3u8.tmp", path);
-        let final_playlist = format!("{}/playlist.m3u8", path);
-
-        tokio::fs::write(&temp_playlist, playlist_content).await?;
-        tokio::fs::rename(&temp_playlist, &final_playlist).await?;
-
-        Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_manage_playlist_retention() {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let path = temp_dir.path().to_str().unwrap();
-
-        // Config setup: 5 hours retention
-        let mut config = Config::default();
-        config.recording_retention = "5h".to_string();
-        config.recording_segment_seconds = 10;
-
-        let now_ts = chrono::Utc::now().timestamp();
-
-        // File 1: 10 hours ago (should be deleted)
-        let time_10h_ago = now_ts - (10 * 3600);
-        let file_10h_ago = format!("{}.mp4", time_10h_ago);
-        tokio::fs::write(temp_dir.path().join(&file_10h_ago), b"dummy")
-            .await
-            .unwrap();
-
-        // File 2: 1 hour ago (should be kept)
-        let time_1h_ago = now_ts - (1 * 3600);
-        let file_1h_ago = format!("{}.mp4", time_1h_ago);
-        tokio::fs::write(temp_dir.path().join(&file_1h_ago), b"dummy")
-            .await
-            .unwrap();
-
-        // Run manage_playlist
-        PlaylistManager::manage_playlist(&config, path)
-            .await
-            .unwrap();
-
-        // Check which files exist
-        let mut dir = tokio::fs::read_dir(path).await.unwrap();
-        let mut files = Vec::new();
-        while let Some(entry) = dir.next_entry().await.unwrap() {
-            let name = entry.file_name().to_string_lossy().into_owned();
-            if name.ends_with(".mp4") {
-                files.push(name);
-            }
-        }
-
-        assert!(
-            !files.contains(&file_10h_ago),
-            "Old file {} should be deleted",
-            file_10h_ago
-        );
-        assert!(
-            files.contains(&file_1h_ago),
-            "New file {} should be kept",
-            file_1h_ago
-        );
-
-        // Verify playlist.m3u8 content
-        let playlist_path = temp_dir.path().join("playlist.m3u8");
-        let playlist = tokio::fs::read_to_string(playlist_path).await.unwrap();
-        
-        let expected_sequence = time_1h_ago / config.recording_segment_seconds as i64;
-        let expected_playlist = format!(
-            "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:10\n#EXT-X-MEDIA-SEQUENCE:{}\n#EXT-X-PLAYLIST-TYPE:EVENT\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:10.0000,\n{}\n",
-            expected_sequence,
-            file_1h_ago
-        );
-
-        assert_eq!(playlist, expected_playlist, "The playlist content does not match expected output");
     }
 }
